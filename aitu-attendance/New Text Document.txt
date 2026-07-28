@@ -1,0 +1,892 @@
+import React, { useState } from 'react';
+import { EMPLOYEES, DEPARTMENTS, COLLEGES } from '../data';
+
+function Employees({ t, lang, user }) {
+
+  const [employees, setEmployees] = useState(EMPLOYEES);
+
+  const [search, setSearch] = useState('');
+  const [filterDept, setFilterDept] = useState('all');
+
+  const [showForm, setShowForm] = useState(false);
+
+  const [form, setForm] = useState({
+    name: '',
+    nameEn: '',
+    email: '',
+    phone: '',
+
+    role: 'academic',
+
+    collegeId: '',
+    departmentId: '',
+
+    adminDepartmentId: '',
+
+    headType: 'academic',
+  });
+
+  const ADMIN_DEPTS = [
+    {
+      id: 'HR',
+      name: 'الموارد البشرية',
+      nameEn: 'Human Resources'
+    },
+    {
+      id: 'FIN',
+      name: 'الشؤون المالية',
+      nameEn: 'Finance'
+    },
+    {
+      id: 'IT_ADMIN',
+      name: 'إدارة تقنية المعلومات',
+      nameEn: 'IT Administration'
+    },
+    {
+      id: 'SEC',
+      name: 'الشؤون الأكاديمية',
+      nameEn: 'Academic Affairs'
+    },
+    {
+      id: 'STU',
+      name: 'شؤون الطلاب',
+      nameEn: 'Student Affairs'
+    },
+  ];
+
+  function resetForm() {
+
+    setForm({
+      name: '',
+      nameEn: '',
+      email: '',
+      phone: '',
+
+      role: 'academic',
+
+      collegeId: '',
+      departmentId: '',
+
+      adminDepartmentId: '',
+
+      headType: 'academic',
+    });
+  }
+
+  function handleSubmit() {
+
+    const newEmp = {
+      ...form,
+      id: 'EMP' + String(employees.length + 1).padStart(3, '0'),
+    };
+
+    setEmployees(prev => [...prev, newEmp]);
+
+    resetForm();
+
+    setShowForm(false);
+  }
+
+  const filtered = employees
+    .filter(emp =>
+      user.role === 'manager'
+        ? emp.departmentId === user.departmentId
+        : true
+    )
+    .filter(emp => {
+
+      const name =
+        lang === 'en'
+          ? emp.nameEn
+          : emp.name;
+
+      const matchSearch =
+        name.toLowerCase().includes(search.toLowerCase());
+
+      const matchDept =
+        filterDept === 'all' ||
+        emp.departmentId === filterDept ||
+        emp.adminDepartmentId === filterDept;
+
+      return matchSearch && matchDept;
+    });
+
+  function getRoleName(emp) {
+
+    switch (emp.role) {
+
+      case 'academic':
+        return lang === 'ar'
+          ? 'موظف أكاديمي'
+          : 'Academic Employee';
+
+      case 'administrative':
+        return lang === 'ar'
+          ? 'موظف إداري'
+          : 'Administrative Employee';
+
+      case 'head_department':
+        return lang === 'ar'
+          ? 'رئيس قسم'
+          : 'Head of Department';
+
+      case 'dean':
+        return lang === 'ar'
+          ? 'عميد كلية'
+          : 'Dean';
+
+      default:
+        return '-';
+    }
+  }
+
+  function getRoleBadge(emp) {
+
+    switch (emp.role) {
+
+      case 'academic':
+        return 'badge-blue';
+
+      case 'administrative':
+        return 'badge-amber';
+
+      case 'head_department':
+        return 'badge-green';
+
+      case 'dean':
+        return 'badge-purple';
+
+      default:
+        return 'badge-blue';
+    }
+  }
+
+  function getDepartmentName(emp) {
+
+    // إداري
+    if (emp.role === 'administrative') {
+
+      const d =
+        ADMIN_DEPTS.find(
+          d => d.id === emp.adminDepartmentId
+        );
+
+      return lang === 'en'
+        ? d?.nameEn
+        : d?.name;
+    }
+
+    // رئيس إدارة
+    if (
+      emp.role === 'head_department' &&
+      emp.headType === 'administrative'
+    ) {
+
+      const d =
+        ADMIN_DEPTS.find(
+          d => d.id === emp.adminDepartmentId
+        );
+
+      return lang === 'en'
+        ? d?.nameEn
+        : d?.name;
+    }
+
+    // أكاديمي / رئيس قسم
+    const d =
+      DEPARTMENTS.find(
+        d => d.id === emp.departmentId
+      );
+
+    return lang === 'en'
+      ? d?.nameEn
+      : d?.name;
+  }
+
+  function getCollegeName(emp) {
+
+    const college =
+      COLLEGES.find(
+        c => c.id === emp.collegeId
+      );
+
+    return lang === 'en'
+      ? college?.nameEn
+      : college?.name;
+  }
+
+  return (
+    <div>
+
+      {/* Header */}
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: '20px',
+          flexWrap: 'wrap',
+          gap: '10px'
+        }}
+      >
+
+        <h2
+          style={{
+            margin: 0,
+            fontSize: '22px',
+            fontWeight: '700',
+            color: '#0F172A'
+          }}
+        >
+          {lang === 'ar'
+            ? 'الموظفون'
+            : 'Employees'}
+        </h2>
+
+        {user.role === 'admin' && (
+          <button
+            onClick={() => setShowForm(!showForm)}
+            style={{
+              padding: '10px 18px',
+              background: '#1565C0',
+              color: 'white',
+              border: 'none',
+              borderRadius: '10px',
+              fontSize: '13px',
+              fontWeight: '600',
+              cursor: 'pointer',
+              fontFamily: 'Cairo'
+            }}
+          >
+            {showForm
+              ? (lang === 'ar' ? 'إغلاق' : 'Close')
+              : (lang === 'ar' ? '+ إضافة موظف' : '+ Add Employee')}
+          </button>
+        )}
+
+      </div>
+
+      {/* Search */}
+      <div
+        style={{
+          display: 'flex',
+          gap: '10px',
+          marginBottom: '20px',
+          flexWrap: 'wrap'
+        }}
+      >
+
+        <input
+          placeholder={
+            lang === 'ar'
+              ? 'بحث باسم الموظف...'
+              : 'Search employee...'
+          }
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          style={{
+            flex: 1,
+            minWidth: '220px',
+            padding: '10px 14px',
+            border: '1px solid #E2E8F0',
+            borderRadius: '10px',
+            fontSize: '13px',
+            fontFamily: 'Cairo',
+            outline: 'none'
+          }}
+        />
+
+        <select
+          value={filterDept}
+          onChange={e => setFilterDept(e.target.value)}
+          style={{
+            padding: '10px 14px',
+            border: '1px solid #E2E8F0',
+            borderRadius: '10px',
+            fontSize: '13px',
+            fontFamily: 'Cairo',
+            background: 'white',
+            outline: 'none'
+          }}
+        >
+
+          <option value="all">
+            {lang === 'ar'
+              ? 'كل الأقسام'
+              : 'All Departments'}
+          </option>
+
+          {DEPARTMENTS.map(d => (
+            <option key={d.id} value={d.id}>
+              {lang === 'en'
+                ? d.nameEn
+                : d.name}
+            </option>
+          ))}
+
+          {ADMIN_DEPTS.map(d => (
+            <option key={d.id} value={d.id}>
+              {lang === 'en'
+                ? d.nameEn
+                : d.name}
+            </option>
+          ))}
+
+        </select>
+
+      </div>
+
+      {/* Form */}
+      {showForm && (
+        <div
+          style={{
+            background: 'white',
+            border: '1px solid #E2E8F0',
+            borderRadius: '16px',
+            padding: '20px',
+            marginBottom: '24px',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.05)'
+          }}
+        >
+
+          <h3
+            style={{
+              marginTop: 0,
+              marginBottom: '18px',
+              fontSize: '18px',
+              fontWeight: '700'
+            }}
+          >
+            {lang === 'ar'
+              ? 'إضافة موظف جديد'
+              : 'Add New Employee'}
+          </h3>
+
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns:
+                'repeat(auto-fit, minmax(240px,1fr))',
+              gap: '14px'
+            }}
+          >
+
+            {/* Arabic Name */}
+            <input
+              placeholder={
+                lang === 'ar'
+                  ? 'الاسم بالعربي'
+                  : 'Arabic Name'
+              }
+              value={form.name}
+              onChange={e =>
+                setForm({
+                  ...form,
+                  name: e.target.value
+                })
+              }
+              style={inputStyle}
+            />
+
+            {/* English Name */}
+            <input
+              placeholder={
+                lang === 'ar'
+                  ? 'الاسم بالإنجليزي'
+                  : 'English Name'
+              }
+              value={form.nameEn}
+              onChange={e =>
+                setForm({
+                  ...form,
+                  nameEn: e.target.value
+                })
+              }
+              style={inputStyle}
+            />
+
+            {/* Email */}
+            <input
+              placeholder="example@email.com"
+              value={form.email}
+              onChange={e =>
+                setForm({
+                  ...form,
+                  email: e.target.value
+                })
+              }
+              style={inputStyle}
+            />
+
+            {/* Phone */}
+            <input
+              placeholder={
+                lang === 'ar'
+                  ? 'رقم الهاتف'
+                  : 'Phone'
+              }
+              value={form.phone}
+              onChange={e =>
+                setForm({
+                  ...form,
+                  phone: e.target.value
+                })
+              }
+              style={inputStyle}
+            />
+
+            {/* Role */}
+            <select
+              value={form.role}
+              onChange={e =>
+                setForm({
+                  ...form,
+
+                  role: e.target.value,
+
+                  collegeId: '',
+                  departmentId: '',
+                  adminDepartmentId: '',
+                })
+              }
+              style={inputStyle}
+            >
+
+              <option value="academic">
+                {lang === 'ar'
+                  ? 'موظف أكاديمي'
+                  : 'Academic Employee'}
+              </option>
+
+              <option value="administrative">
+                {lang === 'ar'
+                  ? 'موظف إداري'
+                  : 'Administrative Employee'}
+              </option>
+
+              <option value="head_department">
+                {lang === 'ar'
+                  ? 'رئيس قسم / مدير إدارة'
+                  : 'Head Department'}
+              </option>
+
+              <option value="dean">
+                {lang === 'ar'
+                  ? 'عميد كلية'
+                  : 'Dean'}
+              </option>
+
+            </select>
+
+            {/* Academic */}
+            {form.role === 'academic' && (
+              <>
+                <select
+                  value={form.collegeId}
+                  onChange={e =>
+                    setForm({
+                      ...form,
+                      collegeId: e.target.value,
+                      departmentId: ''
+                    })
+                  }
+                  style={inputStyle}
+                >
+
+                  <option value="">
+                    {lang === 'ar'
+                      ? 'اختر الكلية'
+                      : 'Select College'}
+                  </option>
+
+                  {COLLEGES.map(c => (
+                    <option key={c.id} value={c.id}>
+                      {lang === 'en'
+                        ? c.nameEn
+                        : c.name}
+                    </option>
+                  ))}
+
+                </select>
+
+                <select
+                  value={form.departmentId}
+                  onChange={e =>
+                    setForm({
+                      ...form,
+                      departmentId: e.target.value
+                    })
+                  }
+                  style={inputStyle}
+                >
+
+                  <option value="">
+                    {lang === 'ar'
+                      ? 'اختر القسم'
+                      : 'Select Department'}
+                  </option>
+
+                  {DEPARTMENTS
+                    .filter(
+                      d => d.collegeId === form.collegeId
+                    )
+                    .map(d => (
+                      <option key={d.id} value={d.id}>
+                        {lang === 'en'
+                          ? d.nameEn
+                          : d.name}
+                      </option>
+                    ))}
+
+                </select>
+              </>
+            )}
+
+            {/* Administrative */}
+            {form.role === 'administrative' && (
+              <select
+                value={form.adminDepartmentId}
+                onChange={e =>
+                  setForm({
+                    ...form,
+                    adminDepartmentId: e.target.value
+                  })
+                }
+                style={inputStyle}
+              >
+
+                <option value="">
+                  {lang === 'ar'
+                    ? 'اختر الإدارة'
+                    : 'Select Administration'}
+                </option>
+
+                {ADMIN_DEPTS.map(d => (
+                  <option key={d.id} value={d.id}>
+                    {lang === 'en'
+                      ? d.nameEn
+                      : d.name}
+                  </option>
+                ))}
+
+              </select>
+            )}
+
+            {/* Head Department */}
+            {form.role === 'head_department' && (
+              <>
+                <select
+                  value={form.headType}
+                  onChange={e =>
+                    setForm({
+                      ...form,
+                      headType: e.target.value,
+
+                      departmentId: '',
+                      adminDepartmentId: '',
+                    })
+                  }
+                  style={inputStyle}
+                >
+
+                  <option value="academic">
+                    {lang === 'ar'
+                      ? 'رئيس قسم أكاديمي'
+                      : 'Academic Head'}
+                  </option>
+
+                  <option value="administrative">
+                    {lang === 'ar'
+                      ? 'مدير إدارة'
+                      : 'Administrative Head'}
+                  </option>
+
+                </select>
+
+                {/* Academic Head */}
+                {form.headType === 'academic' && (
+                  <>
+                    <select
+                      value={form.collegeId}
+                      onChange={e =>
+                        setForm({
+                          ...form,
+                          collegeId: e.target.value,
+                          departmentId: ''
+                        })
+                      }
+                      style={inputStyle}
+                    >
+
+                      <option value="">
+                        {lang === 'ar'
+                          ? 'اختر الكلية'
+                          : 'Select College'}
+                      </option>
+
+                      {COLLEGES.map(c => (
+                        <option key={c.id} value={c.id}>
+                          {lang === 'en'
+                            ? c.nameEn
+                            : c.name}
+                        </option>
+                      ))}
+
+                    </select>
+
+                    <select
+                      value={form.departmentId}
+                      onChange={e =>
+                        setForm({
+                          ...form,
+                          departmentId: e.target.value
+                        })
+                      }
+                      style={inputStyle}
+                    >
+
+                      <option value="">
+                        {lang === 'ar'
+                          ? 'اختر القسم'
+                          : 'Select Department'}
+                      </option>
+
+                      {DEPARTMENTS
+                        .filter(
+                          d => d.collegeId === form.collegeId
+                        )
+                        .map(d => (
+                          <option key={d.id} value={d.id}>
+                            {lang === 'en'
+                              ? d.nameEn
+                              : d.name}
+                          </option>
+                        ))}
+
+                    </select>
+                  </>
+                )}
+
+                {/* Administrative Head */}
+                {form.headType === 'administrative' && (
+                  <select
+                    value={form.adminDepartmentId}
+                    onChange={e =>
+                      setForm({
+                        ...form,
+                        adminDepartmentId: e.target.value
+                      })
+                    }
+                    style={inputStyle}
+                  >
+
+                    <option value="">
+                      {lang === 'ar'
+                        ? 'اختر الإدارة'
+                        : 'Select Administration'}
+                    </option>
+
+                    {ADMIN_DEPTS.map(d => (
+                      <option key={d.id} value={d.id}>
+                        {lang === 'en'
+                          ? d.nameEn
+                          : d.name}
+                      </option>
+                    ))}
+
+                  </select>
+                )}
+              </>
+            )}
+
+            {/* Dean */}
+            {form.role === 'dean' && (
+              <select
+                value={form.collegeId}
+                onChange={e =>
+                  setForm({
+                    ...form,
+                    collegeId: e.target.value
+                  })
+                }
+                style={inputStyle}
+              >
+
+                <option value="">
+                  {lang === 'ar'
+                    ? 'اختر الكلية'
+                    : 'Select College'}
+                </option>
+
+                {COLLEGES.map(c => (
+                  <option key={c.id} value={c.id}>
+                    {lang === 'en'
+                      ? c.nameEn
+                      : c.name}
+                  </option>
+                ))}
+
+              </select>
+            )}
+
+          </div>
+
+          <button
+            onClick={handleSubmit}
+            style={{
+              marginTop: '20px',
+              padding: '10px 24px',
+              background: '#1565C0',
+              color: 'white',
+              border: 'none',
+              borderRadius: '10px',
+              fontSize: '14px',
+              fontWeight: '600',
+              cursor: 'pointer',
+              fontFamily: 'Cairo'
+            }}
+          >
+            {lang === 'ar'
+              ? 'حفظ الموظف'
+              : 'Save Employee'}
+          </button>
+
+        </div>
+      )}
+
+      {/* Table */}
+      <div className="table-card">
+
+        <div
+          className="table-header"
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center'
+          }}
+        >
+
+          <span>
+            {lang === 'ar'
+              ? 'قائمة الموظفين'
+              : 'Employees List'}
+          </span>
+
+          <span className="badge badge-blue">
+            {filtered.length}{' '}
+            {lang === 'ar'
+              ? 'موظف'
+              : 'employees'}
+          </span>
+
+        </div>
+
+        <table>
+
+          <thead>
+            <tr>
+
+              <th style={{ textAlign: 'center' }}>
+                {t.name}
+              </th>
+
+              <th style={{ textAlign: 'center' }}>
+                {lang === 'ar'
+                  ? 'الوظيفة'
+                  : 'Role'}
+              </th>
+
+              <th style={{ textAlign: 'center' }}>
+                {lang === 'ar'
+                  ? 'القسم / الإدارة'
+                  : 'Department'}
+              </th>
+
+              <th style={{ textAlign: 'center' }}>
+                {lang === 'ar'
+                  ? 'الكلية'
+                  : 'College'}
+              </th>
+
+              <th style={{ textAlign: 'center' }}>
+                {lang === 'ar'
+                  ? 'البريد'
+                  : 'Email'}
+              </th>
+
+              <th style={{ textAlign: 'center' }}>
+                {lang === 'ar'
+                  ? 'الهاتف'
+                  : 'Phone'}
+              </th>
+
+            </tr>
+          </thead>
+
+          <tbody>
+
+            {filtered.map(emp => (
+
+              <tr key={emp.id}>
+
+                <td
+                  style={{
+                    textAlign: 'center',
+                    fontWeight: '600'
+                  }}
+                >
+                  {lang === 'en'
+                    ? emp.nameEn
+                    : emp.name}
+                </td>
+
+                <td style={{ textAlign: 'center' }}>
+                  <span
+                    className={`badge ${getRoleBadge(emp)}`}
+                  >
+                    {getRoleName(emp)}
+                  </span>
+                </td>
+
+                <td style={{ textAlign: 'center' }}>
+                  {getDepartmentName(emp) || '-'}
+                </td>
+
+                <td style={{ textAlign: 'center' }}>
+                  {getCollegeName(emp) || '-'}
+                </td>
+
+                <td style={{ textAlign: 'center' }}>
+                  {emp.email}
+                </td>
+
+                <td style={{ textAlign: 'center' }}>
+                  {emp.phone}
+                </td>
+
+              </tr>
+
+            ))}
+
+          </tbody>
+
+        </table>
+
+      </div>
+
+    </div>
+  );
+}
+
+const inputStyle = {
+  width: '100%',
+  padding: '10px 14px',
+  border: '1px solid #E2E8F0',
+  borderRadius: '10px',
+  fontSize: '13px',
+  fontFamily: 'Cairo',
+  outline: 'none',
+  background: 'white'
+};
+
+export default Employees;
