@@ -1,13 +1,11 @@
-﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using System;
-using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
 using Attendance_System.Models;
 using Attendance_System.Enums;
 using Attendance_System.Middleware;
-using Attendance_System.Data;
+using Attendance_System.UnitOfWork;
+using Attendance_System.DTOs.Reports;
 
 namespace Attendance_System.Controllers
 {
@@ -15,11 +13,13 @@ namespace Attendance_System.Controllers
     [ApiController]
     public class ReportsController : ControllerBase
     {
-        private readonly AppDbContext _context;
-        public ReportsController(AppDbContext context) { _context = context; }
+        private readonly IUnitOfWork _unitOfWork;
 
-        // GET /api/reports/summary?from=&to=&departmentId=
-        // High-level KPIs. "present" counts Present + Left (matches the front-end definition).
+        public ReportsController(IUnitOfWork unitOfWork)
+        {
+            _unitOfWork = unitOfWork;
+        }
+
         [HttpGet("summary")]
         [AuthorizedRoles(UserRole.Admin, UserRole.Hr, UserRole.Head)]
         public async Task<IActionResult> Summary(
@@ -27,10 +27,14 @@ namespace Attendance_System.Controllers
             [FromQuery] DateOnly? to,
             [FromQuery] string? departmentId)
         {
-            var att = _context.AttendanceLogs.Include(a => a.Employee).AsQueryable();
+            var att = _unitOfWork.AttendanceLogs.Query()
+                .Include(a => a.Employee)
+                .AsQueryable();
+
             if (from.HasValue) att = att.Where(a => a.Date >= from.Value);
             if (to.HasValue) att = att.Where(a => a.Date <= to.Value);
-            if (!string.IsNullOrEmpty(departmentId)) att = att.Where(a => a.Employee!.DepartmentId == departmentId);
+            if (!string.IsNullOrEmpty(departmentId))
+                att = att.Where(a => a.Employee!.DepartmentId == departmentId);
 
             var total = await att.CountAsync();
             var present = await att.CountAsync(a => a.Status == AttendanceStatus.Present || a.Status == AttendanceStatus.Left);
@@ -38,46 +42,52 @@ namespace Attendance_System.Controllers
             var late = await att.CountAsync(a => a.Status == AttendanceStatus.Late);
 
             var today = DateOnly.FromDateTime(DateTime.Today);
-            var todayAtt = _context.AttendanceLogs.Where(a => a.Date == today);
+            var todayAtt = _unitOfWork.AttendanceLogs.Query().Where(a => a.Date == today);
             if (!string.IsNullOrEmpty(departmentId))
                 todayAtt = todayAtt.Where(a => a.Employee!.DepartmentId == departmentId);
 
-            var empQuery = _context.Employees.Where(e => e.DeletedAt == null && e.Status == "active");
-            if (!string.IsNullOrEmpty(departmentId)) empQuery = empQuery.Where(e => e.DepartmentId == departmentId);
+            var empQuery = _unitOfWork.Employees.Query()
+                .Where(e => e.DeletedAt == null && e.Status == "active");
+            if (!string.IsNullOrEmpty(departmentId))
+                empQuery = empQuery.Where(e => e.DepartmentId == departmentId);
 
-            var onLeaveToday = await _context.LeaveRequests
+            var onLeaveToday = await _unitOfWork.LeaveRequests.Query()
                 .CountAsync(l => l.Status == LeaveStatus.Approved && l.FromDate <= today && l.ToDate >= today);
 
             return Ok(new
             {
                 success = true,
-                data = new
+                data = new ReportSummaryDto
                 {
                     TotalEmployees = await empQuery.CountAsync(),
-                    Range = new { From = from, To = to },
+                    Range = new RangeDto { From = from, To = to },
                     Present = present,
                     Absent = absent,
                     Late = late,
                     AttendanceRate = total > 0 ? (int)Math.Round((double)present / total * 100) : 0,
-                    Today = new
+                    Today = new TodaySummaryDto
                     {
                         Present = await todayAtt.CountAsync(a => a.Status == AttendanceStatus.Present || a.Status == AttendanceStatus.Left),
                         Absent = await todayAtt.CountAsync(a => a.Status == AttendanceStatus.Absent),
                         Late = await todayAtt.CountAsync(a => a.Status == AttendanceStatus.Late)
                     },
-                    PendingLeaves = await _context.LeaveRequests.CountAsync(l => l.Status == LeaveStatus.Pending),
-                    PendingPermissions = await _context.PermissionRequests.CountAsync(p => p.Status == LeaveStatus.Pending),
+                    PendingLeaves = await _unitOfWork.LeaveRequests.Query()
+                        .CountAsync(l => l.Status == LeaveStatus.Pending),
+                    PendingPermissions = await _unitOfWork.PermissionRequests.Query()
+                        .CountAsync(p => p.Status == LeaveStatus.Pending),
                     OnLeaveToday = onLeaveToday
                 }
             });
         }
 
-        // GET /api/reports/attendance?from=&to=  — breakdown per department
         [HttpGet("attendance")]
         [AuthorizedRoles(UserRole.Admin, UserRole.Hr, UserRole.Head)]
         public async Task<IActionResult> AttendanceByDepartment([FromQuery] DateOnly? from, [FromQuery] DateOnly? to)
         {
-            var logs = _context.AttendanceLogs.Include(a => a.Employee).ThenInclude(e => e!.Department).AsQueryable();
+            var logs = _unitOfWork.AttendanceLogs.Query()
+                .Include(a => a.Employee).ThenInclude(e => e!.Department)
+                .AsQueryable();
+
             if (from.HasValue) logs = logs.Where(a => a.Date >= from.Value);
             if (to.HasValue) logs = logs.Where(a => a.Date <= to.Value);
 
@@ -96,14 +106,14 @@ namespace Attendance_System.Controllers
                 .ToListAsync();
 
             var result = grouped
-                .Select(g => new
+                .Select(g => new AttendanceByDeptDto
                 {
-                    g.DepartmentId,
-                    g.Department,
-                    g.Total,
-                    g.Present,
-                    g.Absent,
-                    g.Late,
+                    DepartmentId = g.DepartmentId ?? string.Empty,
+                    Department = g.Department ?? string.Empty,
+                    Total = g.Total,
+                    Present = g.Present,
+                    Absent = g.Absent,
+                    Late = g.Late,
                     Pct = g.Total > 0 ? (int)Math.Round((double)g.Present / g.Total * 100) : 0
                 })
                 .OrderByDescending(g => g.Pct)
@@ -112,21 +122,23 @@ namespace Attendance_System.Controllers
             return Ok(new { success = true, data = result });
         }
 
-        // GET /api/reports/leaves  — breakdown per leave type
         [HttpGet("leaves")]
         [AuthorizedRoles(UserRole.Admin, UserRole.Hr)]
         public async Task<IActionResult> LeavesByType([FromQuery] DateOnly? from, [FromQuery] DateOnly? to)
         {
-            var lr = _context.LeaveRequests.Include(l => l.LeaveType).AsQueryable();
+            var lr = _unitOfWork.LeaveRequests.Query()
+                .Include(l => l.LeaveType)
+                .AsQueryable();
+
             if (from.HasValue) lr = lr.Where(l => l.FromDate >= from.Value);
             if (to.HasValue) lr = lr.Where(l => l.FromDate <= to.Value);
 
             var result = await lr
                 .GroupBy(l => new { l.LeaveTypeId, TypeName = l.LeaveType!.Name })
-                .Select(g => new
+                .Select(g => new LeaveByTypeDto
                 {
-                    LeaveTypeId = g.Key.LeaveTypeId,
-                    LeaveType = g.Key.TypeName,
+                    LeaveTypeId = g.Key.LeaveTypeId ?? string.Empty,
+                    LeaveType = g.Key.TypeName ?? string.Empty,
                     Total = g.Count(),
                     Approved = g.Count(l => l.Status == LeaveStatus.Approved),
                     Pending = g.Count(l => l.Status == LeaveStatus.Pending),
@@ -137,9 +149,6 @@ namespace Attendance_System.Controllers
             return Ok(new { success = true, data = result });
         }
 
-        // GET /api/reports/export?type=attendance|leaves&from=&to=&departmentId=
-        // Returns a UTF-8 CSV (BOM included) so Excel opens Arabic correctly.
-        // For native .xlsx add the ClosedXML package and branch here.
         [HttpGet("export")]
         [AuthorizedRoles(UserRole.Admin, UserRole.Hr, UserRole.Head)]
         public async Task<IActionResult> Export(
@@ -149,14 +158,19 @@ namespace Attendance_System.Controllers
             [FromQuery] string? departmentId = null)
         {
             var sb = new StringBuilder();
-            sb.Append('\uFEFF'); // BOM for Excel/Arabic
+            sb.Append('\uFEFF');
 
             if (type.Equals("leaves", StringComparison.OrdinalIgnoreCase))
             {
-                var lr = _context.LeaveRequests.Include(l => l.Employee).Include(l => l.LeaveType).AsQueryable();
+                var lr = _unitOfWork.LeaveRequests.Query()
+                    .Include(l => l.Employee)
+                    .Include(l => l.LeaveType)
+                    .AsQueryable();
+
                 if (from.HasValue) lr = lr.Where(l => l.FromDate >= from.Value);
                 if (to.HasValue) lr = lr.Where(l => l.FromDate <= to.Value);
-                if (!string.IsNullOrEmpty(departmentId)) lr = lr.Where(l => l.Employee!.DepartmentId == departmentId);
+                if (!string.IsNullOrEmpty(departmentId))
+                    lr = lr.Where(l => l.Employee!.DepartmentId == departmentId);
 
                 var rows = await lr.OrderByDescending(l => l.FromDate).ToListAsync();
                 sb.AppendLine("Employee,LeaveType,From,To,Days,Status");
@@ -169,10 +183,14 @@ namespace Attendance_System.Controllers
             }
             else
             {
-                var logs = _context.AttendanceLogs.Include(a => a.Employee).ThenInclude(e => e!.Department).AsQueryable();
+                var logs = _unitOfWork.AttendanceLogs.Query()
+                    .Include(a => a.Employee).ThenInclude(e => e!.Department)
+                    .AsQueryable();
+
                 if (from.HasValue) logs = logs.Where(a => a.Date >= from.Value);
                 if (to.HasValue) logs = logs.Where(a => a.Date <= to.Value);
-                if (!string.IsNullOrEmpty(departmentId)) logs = logs.Where(a => a.Employee!.DepartmentId == departmentId);
+                if (!string.IsNullOrEmpty(departmentId))
+                    logs = logs.Where(a => a.Employee!.DepartmentId == departmentId);
 
                 var rows = await logs.OrderByDescending(a => a.Date).ToListAsync();
                 sb.AppendLine("Employee,Department,Date,CheckIn,CheckOut,Status");

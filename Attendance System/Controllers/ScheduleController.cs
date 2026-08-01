@@ -1,12 +1,10 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using System;
-using System.Linq;
-using System.Threading.Tasks;
 using Attendance_System.Models;
 using Attendance_System.Enums;
 using Attendance_System.Middleware;
-using Attendance_System.Data;
+using Attendance_System.UnitOfWork;
+using Attendance_System.DTOs.Schedule;
 
 namespace Attendance_System.Controllers
 {
@@ -14,31 +12,30 @@ namespace Attendance_System.Controllers
     [ApiController]
     public class ScheduleController : ControllerBase
     {
-        private readonly AppDbContext _context;
+        private readonly IUnitOfWork _unitOfWork;
 
-        public ScheduleController(AppDbContext context)
+        public ScheduleController(IUnitOfWork unitOfWork)
         {
-            _context = context;
+            _unitOfWork = unitOfWork;
         }
 
-        // NOTE: Colleges and Departments endpoints were moved out of this controller
-        // into CollegesController and DepartmentsController. This controller now
-        // only handles work schedules and their assignments.
-
         [HttpGet("work")]
+        [AuthorizedRoles]
         public async Task<IActionResult> GetWorkSchedules()
         {
-            var schedules = await _context.WorkSchedules.Select(ws => new
-            {
-                ws.Id,
-                ws.Title,
-                ws.TimeMode,
-                ws.CheckInTime,
-                ws.CheckOutTime,
-                ws.HoursPerDay,
-                ws.DaysPerWeek,
-                ws.TargetScope
-            }).ToListAsync();
+            var schedules = await _unitOfWork.WorkSchedules.Query()
+                .Select(ws => new WorkScheduleDto
+                {
+                    Id = ws.Id,
+                    Title = ws.Title,
+                    TimeMode = ws.TimeMode,
+                    CheckInTime = ws.CheckInTime,
+                    CheckOutTime = ws.CheckOutTime,
+                    HoursPerDay = ws.HoursPerDay,
+                    DaysPerWeek = ws.DaysPerWeek,
+                    TargetScope = ws.TargetScope
+                })
+                .ToListAsync();
 
             return Ok(new { success = true, data = schedules });
         }
@@ -60,16 +57,35 @@ namespace Attendance_System.Controllers
                 UpdatedAt = DateTime.UtcNow
             };
 
-            _context.WorkSchedules.Add(schedule);
-            await _context.SaveChangesAsync();
+            await _unitOfWork.WorkSchedules.AddAsync(schedule);
+            await _unitOfWork.CompleteAsync();
 
-            return Ok(new { success = true, message = "Work schedule added successfully", data = schedule });
+            return Ok(new
+            {
+                success = true,
+                message = "Work schedule added successfully",
+                data = new
+                {
+                    schedule.Id,
+                    schedule.Title,
+                    schedule.TimeMode,
+                    schedule.CheckInTime,
+                    schedule.CheckOutTime
+                }
+            });
         }
 
         [HttpPost("assign")]
         [AuthorizedRoles(UserRole.Admin, UserRole.Hr)]
         public async Task<IActionResult> AssignSchedule([FromBody] AssignScheduleDto dto)
         {
+            var schedule = await _unitOfWork.WorkSchedules.GetByIdAsync(dto.ScheduleId);
+            if (schedule == null)
+                return BadRequest(new { success = false, message = "Schedule not found" });
+
+            if (string.IsNullOrEmpty(dto.EmployeeId) && string.IsNullOrEmpty(dto.DepartmentId))
+                return BadRequest(new { success = false, message = "Either EmployeeId or DepartmentId must be provided" });
+
             var assignment = new ScheduleAssignment
             {
                 ScheduleId = dto.ScheduleId,
@@ -77,25 +93,32 @@ namespace Attendance_System.Controllers
                 DepartmentId = dto.DepartmentId
             };
 
-            _context.ScheduleAssignments.Add(assignment);
-            await _context.SaveChangesAsync();
+            await _unitOfWork.ScheduleAssignments.AddAsync(assignment);
+            await _unitOfWork.CompleteAsync();
 
-            return Ok(new { success = true, message = "Schedule assigned successfully", data = assignment });
+            return Ok(new
+            {
+                success = true,
+                message = "Schedule assigned successfully",
+                data = new { assignment.Id, assignment.ScheduleId, assignment.EmployeeId, assignment.DepartmentId }
+            });
         }
 
         [HttpGet("employee/{employeeId}")]
+        [AuthorizedRoles]
         public async Task<IActionResult> GetEmployeeSchedule(string employeeId)
         {
-            var assignment = await _context.ScheduleAssignments
+            var assignment = await _unitOfWork.ScheduleAssignments.Query()
                 .Include(sa => sa.Schedule)
                 .FirstOrDefaultAsync(sa => sa.EmployeeId == employeeId);
 
             if (assignment?.Schedule == null)
             {
-                var employee = await _context.Employees.FindAsync(employeeId);
+                var employee = await _unitOfWork.Employees.Query()
+                    .FirstOrDefaultAsync(e => e.Id == employeeId && e.DeletedAt == null);
                 if (employee?.DepartmentId != null)
                 {
-                    assignment = await _context.ScheduleAssignments
+                    assignment = await _unitOfWork.ScheduleAssignments.Query()
                         .Include(sa => sa.Schedule)
                         .FirstOrDefaultAsync(sa => sa.DepartmentId == employee.DepartmentId);
                 }
@@ -107,35 +130,17 @@ namespace Attendance_System.Controllers
             return Ok(new
             {
                 success = true,
-                data = new
+                data = new EmployeeScheduleDto
                 {
-                    assignment.ScheduleId,
-                    assignment.Schedule.Title,
-                    assignment.Schedule.TimeMode,
-                    assignment.Schedule.CheckInTime,
-                    assignment.Schedule.CheckOutTime,
-                    assignment.Schedule.HoursPerDay,
-                    assignment.Schedule.DaysPerWeek
+                    ScheduleId = assignment.ScheduleId,
+                    Title = assignment.Schedule.Title,
+                    TimeMode = assignment.Schedule.TimeMode,
+                    CheckInTime = assignment.Schedule.CheckInTime,
+                    CheckOutTime = assignment.Schedule.CheckOutTime,
+                    HoursPerDay = assignment.Schedule.HoursPerDay,
+                    DaysPerWeek = assignment.Schedule.DaysPerWeek
                 }
             });
         }
-    }
-
-    public class CreateWorkScheduleDto
-    {
-        public string Title { get; set; } = string.Empty;
-        public ScheduleTimeMode TimeMode { get; set; }
-        public TimeOnly? CheckInTime { get; set; }
-        public TimeOnly? CheckOutTime { get; set; }
-        public decimal HoursPerDay { get; set; } = 8.00m;
-        public int DaysPerWeek { get; set; } = 5;
-        public TargetScope TargetScope { get; set; }
-    }
-
-    public class AssignScheduleDto
-    {
-        public long ScheduleId { get; set; }
-        public string? EmployeeId { get; set; }
-        public string? DepartmentId { get; set; }
     }
 }

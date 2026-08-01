@@ -1,15 +1,13 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using System;
-using System.Collections.Generic;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
-using System.Threading.Tasks;
 using Attendance_System.Models;
 using Attendance_System.Enums;
 using Attendance_System.Services;
 using Attendance_System.Middleware;
-using Attendance_System.Data;
+using Attendance_System.UnitOfWork;
+using Attendance_System.DTOs.Auth;
 using Microsoft.AspNetCore.Authorization;
 
 namespace Attendance_System.Controllers
@@ -18,16 +16,16 @@ namespace Attendance_System.Controllers
     [ApiController]
     public class AuthController : ControllerBase
     {
-        private readonly AppDbContext _context;
+        private readonly IUnitOfWork _unitOfWork;
         private readonly IJwtService _jwtService;
         private readonly IEmailService _emailService;
 
         public AuthController(
-            AppDbContext context,
+            IUnitOfWork unitOfWork,
             IJwtService jwtService,
             IEmailService emailService)
         {
-            _context = context;
+            _unitOfWork = unitOfWork;
             _jwtService = jwtService;
             _emailService = emailService;
         }
@@ -36,12 +34,12 @@ namespace Attendance_System.Controllers
         [AllowAnonymous]
         public async Task<IActionResult> Login([FromBody] LoginDto dto)
         {
-            var user = await _context.Users
+            var user = await _unitOfWork.Users.Query()
                 .Include(u => u.Employee)
                 .ThenInclude(e => e!.Department)
                 .Include(u => u.Employee)
                 .ThenInclude(e => e!.College)
-                .FirstOrDefaultAsync(u => u.Email == dto.Email);
+                .FirstOrDefaultAsync(u => u.Email == dto.Email && u.DeletedAt == null);
 
             if (user == null)
                 return Unauthorized(new { success = false, message = "Invalid email" });
@@ -49,12 +47,13 @@ namespace Attendance_System.Controllers
             if (!BCrypt.Net.BCrypt.Verify(dto.Password, user.PasswordHash))
                 return Unauthorized(new { success = false, message = "Invalid password" });
 
-            if (!user.IsActive || user.DeletedAt != null)
+            if (!user.IsActive)
                 return Unauthorized(new { success = false, message = "Account is inactive, please contact administration" });
 
             user.LastLoginAt = DateTime.Now;
             user.UpdatedAt = DateTime.Now;
-            await _context.SaveChangesAsync();
+            _unitOfWork.Users.Update(user);
+            await _unitOfWork.CompleteAsync();
 
             var token = _jwtService.GenerateToken(user);
 
@@ -62,12 +61,12 @@ namespace Attendance_System.Controllers
             {
                 success = true,
                 message = "Login successful",
-                data = new
+                data = new AuthResponseDto
                 {
                     Token = token,
                     UserId = user.Id,
                     Email = user.Email,
-                    Role = user.Role.ToString(),
+                    Role = user.Role,
                     EmployeeId = user.Employee?.Id,
                     EmployeeName = user.Employee?.Name,
                     Department = user.Employee?.Department?.Name,
@@ -80,11 +79,13 @@ namespace Attendance_System.Controllers
         [AuthorizedRoles(UserRole.Admin)]
         public async Task<IActionResult> Register([FromBody] RegisterDto dto)
         {
-            var userEmailExists = await _context.Users.AnyAsync(u => u.Email == dto.Email);
+            var userEmailExists = await _unitOfWork.Users.Query()
+                .AnyAsync(u => u.Email == dto.Email && u.DeletedAt == null);
             if (userEmailExists)
                 return BadRequest(new { success = false, message = "Email is already registered" });
 
-            var employeeEmailExists = await _context.Employees.AnyAsync(e => e.Email == dto.Email);
+            var employeeEmailExists = await _unitOfWork.Employees.Query()
+                .AnyAsync(e => e.Email == dto.Email && e.DeletedAt == null);
             if (employeeEmailExists)
                 return BadRequest(new { success = false, message = "Employee email already exists" });
 
@@ -107,8 +108,7 @@ namespace Attendance_System.Controllers
                 UpdatedAt = DateTime.Now
             };
 
-            _context.Employees.Add(employee);
-            await _context.SaveChangesAsync();
+            await _unitOfWork.Employees.AddAsync(employee);
 
             var user = new User
             {
@@ -121,8 +121,8 @@ namespace Attendance_System.Controllers
                 UpdatedAt = DateTime.Now
             };
 
-            _context.Users.Add(user);
-            await _context.SaveChangesAsync();
+            await _unitOfWork.Users.AddAsync(user);
+            await _unitOfWork.CompleteAsync();
 
             _ = Task.Run(() => _emailService.SendEmailAsync(user.Email, "Welcome", $"<p>Welcome, {employee.Name}!</p>"));
 
@@ -137,7 +137,8 @@ namespace Attendance_System.Controllers
         [HttpPost("change-password")]
         public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordDto dto)
         {
-            var user = await _context.Users.FindAsync(dto.UserId);
+            var user = await _unitOfWork.Users.Query()
+                .FirstOrDefaultAsync(u => u.Id == dto.UserId && u.DeletedAt == null);
             if (user == null)
                 return NotFound(new { success = false, message = "User not found" });
 
@@ -147,7 +148,8 @@ namespace Attendance_System.Controllers
             user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.NewPassword);
             user.UpdatedAt = DateTime.Now;
 
-            await _context.SaveChangesAsync();
+            _unitOfWork.Users.Update(user);
+            await _unitOfWork.CompleteAsync();
 
             return Ok(new { success = true, message = "Password changed successfully" });
         }
@@ -165,12 +167,12 @@ namespace Attendance_System.Controllers
             if (userId == null)
                 return Unauthorized();
 
-            var user = await _context.Users
+            var user = await _unitOfWork.Users.Query()
                 .Include(u => u.Employee)
                 .ThenInclude(e => e!.Department)
                 .Include(u => u.Employee)
                 .ThenInclude(e => e!.College)
-                .FirstOrDefaultAsync(u => u.Id == userId);
+                .FirstOrDefaultAsync(u => u.Id == userId && u.DeletedAt == null);
 
             if (user == null)
                 return NotFound();
@@ -211,38 +213,7 @@ namespace Attendance_System.Controllers
         private long? GetCurrentUserId()
         {
             var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            return userIdClaim != null && long.TryParse(userIdClaim, out var id) ? id : (long?)null;
+            return userIdClaim != null && long.TryParse(userIdClaim, out var id) ? id : null;
         }
-    }
-
-    // DTOs
-    public class LoginDto
-    {
-        public string Email { get; set; } = string.Empty;
-        public string Password { get; set; } = string.Empty;
-    }
-
-    public class RegisterDto
-    {
-        public string Email { get; set; } = string.Empty;
-        public string Password { get; set; } = string.Empty;
-        public string Name { get; set; } = string.Empty;
-        public string NameEn { get; set; } = string.Empty;
-        public string Phone { get; set; } = string.Empty;
-        public Gender Gender { get; set; }
-        public EmployeeRoleClassification? RoleClassification { get; set; }
-        public EmployeeType? Type { get; set; }
-        public string? AcademicRank { get; set; }
-        public string? DepartmentId { get; set; }
-        public string? CollegeId { get; set; }
-        public string? HeadType { get; set; }
-        public UserRole? Role { get; set; }
-    }
-
-    public class ChangePasswordDto
-    {
-        public long UserId { get; set; }
-        public string OldPassword { get; set; } = string.Empty;
-        public string NewPassword { get; set; } = string.Empty;
     }
 }

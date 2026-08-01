@@ -1,13 +1,11 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
 using Attendance_System.Models;
 using Attendance_System.Enums;
 using Attendance_System.Middleware;
 using Attendance_System.UnitOfWork;
+using Attendance_System.DTOs.Departments;
+using Attendance_System.DTOs.Colleges;
 
 namespace Attendance_System.Controllers
 {
@@ -16,7 +14,11 @@ namespace Attendance_System.Controllers
     public class DepartmentsController : ControllerBase
     {
         private readonly IUnitOfWork _unitOfWork;
-        public DepartmentsController(IUnitOfWork unitOfWork) { _unitOfWork = unitOfWork; }
+
+        public DepartmentsController(IUnitOfWork unitOfWork)
+        {
+            _unitOfWork = unitOfWork;
+        }
 
         [HttpGet]
         [AuthorizedRoles]
@@ -65,14 +67,28 @@ namespace Attendance_System.Controllers
                     Code = c.Code,
                     Departments = c.Departments
                         .Where(d => d.DeletedAt == null && d.DeptType == DepartmentType.Academic)
-                        .Select(d => new CollegeDepartmentDto { Id = d.Id, Name = d.Name, NameEn = d.NameEn, Code = d.Code, DeptType = d.DeptType })
-                        .ToList()
+                        .Select(d => new CollegeDepartmentDto
+                        {
+                            Id = d.Id,
+                            Name = d.Name,
+                            NameEn = d.NameEn,
+                            Code = d.Code,
+                            DeptType = d.DeptType
+                        }).ToList()
                 })
                 .ToListAsync();
 
             var adminDepartments = await _unitOfWork.Departments.Query()
                 .Where(d => d.DeletedAt == null && d.DeptType == DepartmentType.Administrative)
-                .Select(d => new AdminDepartmentDto { Id = d.Id, Name = d.Name, NameEn = d.NameEn, Code = d.Code, DeptType = d.DeptType, ParentType = d.ParentType })
+                .Select(d => new AdminDepartmentDto
+                {
+                    Id = d.Id,
+                    Name = d.Name,
+                    NameEn = d.NameEn,
+                    Code = d.Code,
+                    DeptType = d.DeptType,
+                    ParentType = d.ParentType
+                })
                 .ToListAsync();
 
             return Ok(new { success = true, data = new { colleges, adminDepartments } });
@@ -102,7 +118,9 @@ namespace Attendance_System.Controllers
                 })
                 .FirstOrDefaultAsync();
 
-            if (department == null) return NotFound(new { success = false, message = "Department not found" });
+            if (department == null)
+                return NotFound(new { success = false, message = "Department not found" });
+
             return Ok(new { success = true, data = department });
         }
 
@@ -110,13 +128,17 @@ namespace Attendance_System.Controllers
         [AuthorizedRoles(UserRole.Admin, UserRole.Hr)]
         public async Task<IActionResult> Create([FromBody] CreateDepartmentDto dto)
         {
-            var codeExists = await _unitOfWork.Departments.Query().AnyAsync(d => d.Code == dto.Code && d.DeletedAt == null);
-            if (codeExists) return BadRequest(new { success = false, message = "Department code already exists" });
+            var codeExists = await _unitOfWork.Departments.Query()
+                .AnyAsync(d => d.Code == dto.Code && d.DeletedAt == null);
+            if (codeExists)
+                return BadRequest(new { success = false, message = "Department code already exists" });
 
             if (!string.IsNullOrEmpty(dto.CollegeId))
             {
-                var collegeExists = await _unitOfWork.Colleges.Query().AnyAsync(c => c.Id == dto.CollegeId && c.DeletedAt == null);
-                if (!collegeExists) return BadRequest(new { success = false, message = "Referenced college does not exist" });
+                var collegeExists = await _unitOfWork.Colleges.Query()
+                    .AnyAsync(c => c.Id == dto.CollegeId && c.DeletedAt == null);
+                if (!collegeExists)
+                    return BadRequest(new { success = false, message = "Referenced college does not exist" });
             }
 
             var department = new Department
@@ -137,20 +159,29 @@ namespace Attendance_System.Controllers
             await _unitOfWork.Departments.AddAsync(department);
             await _unitOfWork.CompleteAsync();
 
-            return Ok(new { success = true, message = "Department created successfully", data = new { department.Id, department.Name, department.NameEn, department.Code, department.DeptType } });
+            return Ok(new
+            {
+                success = true,
+                message = "Department created successfully",
+                data = new { department.Id, department.Name, department.NameEn, department.Code, department.DeptType }
+            });
         }
 
         [HttpPut("{id}")]
         [AuthorizedRoles(UserRole.Admin, UserRole.Hr)]
         public async Task<IActionResult> Update(string id, [FromBody] UpdateDepartmentDto dto)
         {
-            var department = await _unitOfWork.Departments.Query().FirstOrDefaultAsync(d => d.Id == id && d.DeletedAt == null);
-            if (department == null) return NotFound(new { success = false, message = "Department not found" });
+            var department = await _unitOfWork.Departments.Query()
+                .FirstOrDefaultAsync(d => d.Id == id && d.DeletedAt == null);
+            if (department == null)
+                return NotFound(new { success = false, message = "Department not found" });
 
             if (!string.IsNullOrEmpty(dto.Code) && dto.Code != department.Code)
             {
-                var codeExists = await _unitOfWork.Departments.Query().AnyAsync(d => d.Code == dto.Code && d.Id != id && d.DeletedAt == null);
-                if (codeExists) return BadRequest(new { success = false, message = "Department code already exists" });
+                var codeExists = await _unitOfWork.Departments.Query()
+                    .AnyAsync(d => d.Code == dto.Code && d.Id != id && d.DeletedAt == null);
+                if (codeExists)
+                    return BadRequest(new { success = false, message = "Department code already exists" });
                 department.Code = dto.Code;
             }
 
@@ -166,21 +197,30 @@ namespace Attendance_System.Controllers
             _unitOfWork.Departments.Update(department);
             await _unitOfWork.CompleteAsync();
 
-            return Ok(new { success = true, message = "Department updated successfully", data = new { department.Id, department.Name, department.NameEn, department.Code, department.DeptType } });
+            return Ok(new
+            {
+                success = true,
+                message = "Department updated successfully",
+                data = new { department.Id, department.Name, department.NameEn, department.Code, department.DeptType }
+            });
         }
 
         [HttpDelete("{id}")]
         [AuthorizedRoles(UserRole.Admin)]
         public async Task<IActionResult> Delete(string id)
         {
-            var department = await _unitOfWork.Departments.Query().FirstOrDefaultAsync(d => d.Id == id && d.DeletedAt == null);
-            if (department == null) return NotFound(new { success = false, message = "Department not found" });
+            var department = await _unitOfWork.Departments.Query()
+                .FirstOrDefaultAsync(d => d.Id == id && d.DeletedAt == null);
+            if (department == null)
+                return NotFound(new { success = false, message = "Department not found" });
 
-            var hasEmployees = await _unitOfWork.Employees.Query().AnyAsync(e => e.DepartmentId == id && e.DeletedAt == null);
+            var hasEmployees = await _unitOfWork.Employees.Query()
+                .AnyAsync(e => e.DepartmentId == id && e.DeletedAt == null);
             if (hasEmployees)
                 return BadRequest(new { success = false, message = "Cannot delete a department that still has active employees" });
 
-            var hasChildren = await _unitOfWork.Departments.Query().AnyAsync(d => d.ParentId == id && d.DeletedAt == null);
+            var hasChildren = await _unitOfWork.Departments.Query()
+                .AnyAsync(d => d.ParentId == id && d.DeletedAt == null);
             if (hasChildren)
                 return BadRequest(new { success = false, message = "Cannot delete a department that has sub-departments" });
 
@@ -191,84 +231,5 @@ namespace Attendance_System.Controllers
 
             return Ok(new { success = true, message = "Department deleted successfully" });
         }
-    }
-
-    // ── Response DTOs ──
-
-    public class DepartmentListItemDto
-    {
-        public string Id { get; set; } = string.Empty;
-        public string Name { get; set; } = string.Empty;
-        public string NameEn { get; set; } = string.Empty;
-        public string Code { get; set; } = string.Empty;
-        public DepartmentType DeptType { get; set; }
-        public string? CollegeId { get; set; }
-        public string? CollegeName { get; set; }
-        public string? ParentId { get; set; }
-        public string? ParentType { get; set; }
-        public int EmployeesCount { get; set; }
-        public DateTime CreatedAt { get; set; }
-    }
-
-    public class DepartmentDetailDto
-    {
-        public string Id { get; set; } = string.Empty;
-        public string Name { get; set; } = string.Empty;
-        public string NameEn { get; set; } = string.Empty;
-        public string Code { get; set; } = string.Empty;
-        public DepartmentType DeptType { get; set; }
-        public string? CollegeId { get; set; }
-        public string? CollegeName { get; set; }
-        public string? ParentId { get; set; }
-        public string? ParentType { get; set; }
-        public string? FunctionDescription { get; set; }
-        public DateTime CreatedAt { get; set; }
-        public DateTime UpdatedAt { get; set; }
-    }
-
-    public class CollegeTreeDto
-    {
-        public string Id { get; set; } = string.Empty;
-        public string Name { get; set; } = string.Empty;
-        public string NameEn { get; set; } = string.Empty;
-        public string Code { get; set; } = string.Empty;
-        // Reuses CollegeDepartmentDto defined in CollegesController.cs (same namespace) - not redefined here.
-        public List<CollegeDepartmentDto> Departments { get; set; } = new();
-    }
-
-    public class AdminDepartmentDto
-    {
-        public string Id { get; set; } = string.Empty;
-        public string Name { get; set; } = string.Empty;
-        public string NameEn { get; set; } = string.Empty;
-        public string Code { get; set; } = string.Empty;
-        public DepartmentType DeptType { get; set; }
-        public string? ParentType { get; set; }
-    }
-
-    // ── Request DTOs (unchanged) ──
-
-    public class CreateDepartmentDto
-    {
-        public string Name { get; set; } = string.Empty;
-        public string NameEn { get; set; } = string.Empty;
-        public string Code { get; set; } = string.Empty;
-        public DepartmentType DeptType { get; set; }
-        public string? CollegeId { get; set; }
-        public string? ParentId { get; set; }
-        public string? ParentType { get; set; }
-        public string? FunctionDescription { get; set; }
-    }
-
-    public class UpdateDepartmentDto
-    {
-        public string? Name { get; set; }
-        public string? NameEn { get; set; }
-        public string? Code { get; set; }
-        public DepartmentType? DeptType { get; set; }
-        public string? CollegeId { get; set; }
-        public string? ParentId { get; set; }
-        public string? ParentType { get; set; }
-        public string? FunctionDescription { get; set; }
     }
 }

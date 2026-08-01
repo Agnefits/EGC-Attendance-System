@@ -1,6 +1,7 @@
 using System;
 using System.Threading.Tasks;
 using Attendance_System.Data;
+using Attendance_System.Models;
 using Attendance_System.Repositories.Classes;
 using Attendance_System.Repositories.Interfaces;
 
@@ -22,6 +23,7 @@ namespace Attendance_System.UnitOfWork
         public IWorkScheduleRepository WorkSchedules { get; private set; }
         public IScheduleAssignmentRepository ScheduleAssignments { get; private set; }
         public IExamScheduleRepository ExamSchedules { get; private set; }
+        public IGenericRepository<SystemSetting> SystemSettings { get; private set; }
 
         public UnitOfWork(AppDbContext context)
         {
@@ -37,6 +39,8 @@ namespace Attendance_System.UnitOfWork
             WorkSchedules = new WorkScheduleRepository(_context);
             ScheduleAssignments = new ScheduleAssignmentRepository(_context);
             ExamSchedules = new ExamScheduleRepository(_context);
+            SystemSettings = new GenericRepository<SystemSetting>(_context);
+
         }
 
         public async Task<int> CompleteAsync()

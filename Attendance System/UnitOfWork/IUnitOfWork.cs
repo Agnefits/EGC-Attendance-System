@@ -1,6 +1,7 @@
 using System;
 using System.Threading.Tasks;
 using Attendance_System.Repositories.Interfaces;
+using Attendance_System.Models;
 
 namespace Attendance_System.UnitOfWork
 {
@@ -17,6 +18,7 @@ namespace Attendance_System.UnitOfWork
         IWorkScheduleRepository WorkSchedules { get; }
         IScheduleAssignmentRepository ScheduleAssignments { get; }
         IExamScheduleRepository ExamSchedules { get; }
+        IGenericRepository<SystemSetting> SystemSettings { get; }
 
         Task<int> CompleteAsync();
     }
