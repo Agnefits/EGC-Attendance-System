@@ -1,6 +1,6 @@
 import useNotifications from './useNotifications';
-import React, { useState, useEffect } from 'react';
-import { EMPLOYEES, ATTENDANCE, DEPARTMENTS, COLLEGES, LEAVES, PERMISSIONS } from '../data';
+import React, { useState, useEffect, useCallback } from 'react';
+import { attendanceService, employeesService, leavesService, permissionsService, structureService } from '../services';
 
 function Modal({ open, onClose, lang, title, children }) {
   if (!open) return null;
@@ -23,15 +23,71 @@ function Modal({ open, onClose, lang, title, children }) {
 function Dashboard({ t, lang, user, setActivePage }) {
   const dir = lang==='ar'?'rtl':'ltr';
   const { notifs: NOTIFS, unread: notifUnread } = useNotifications({ user, lang });
+
+  const [attendance,  setAttendance]  = useState([]);
+  const [employees,   setEmployees]   = useState([]);
+  const [departments, setDepartments] = useState([]);
+  const [colleges,    setColleges]    = useState([]);
+  const [leavesList,  setLeavesList]  = useState([]);
+  const [permsList,   setPermsList]   = useState([]);
+  const [loading,     setLoading]     = useState(true);
+
   const [time, setTime] = useState('');
   const [showAtt,   setShowAtt]   = useState(false);
   const [showEmp,   setShowEmp]   = useState(false);
   const [showLeave, setShowLeave] = useState(false);
   const [deptModal, setDeptModal] = useState(null);
-  const [notifOpen, setNotifOpen] = useState(false); // {dept, emps, stats}
-  const [leavesList, setLeavesList] = useState(LEAVES);
-  const [permsList,  setPermsList]  = useState(PERMISSIONS||[]);
+  const [notifOpen, setNotifOpen] = useState(false);
   const notifRef = React.useRef(null);
+
+  // Normalize backend leave field names to frontend conventions
+  const normalizeLeave = (l) => {
+    const statusRaw = l.status ?? l.Status;
+    let status = 'pending';
+    if (statusRaw === 1 || statusRaw === '1' || String(statusRaw).toLowerCase() === 'approved') status = 'approved';
+    else if (statusRaw === 2 || statusRaw === '2' || String(statusRaw).toLowerCase() === 'rejected') status = 'rejected';
+    else if (statusRaw === 0 || statusRaw === '0' || String(statusRaw).toLowerCase() === 'pending') status = 'pending';
+    else status = String(statusRaw || 'pending').toLowerCase();
+    return {
+      ...l,
+      status,
+      from: l.from || l.fromDate || l.FromDate || '',
+      to: l.to || l.toDate || l.ToDate || '',
+      days: l.days || l.daysCount || l.DaysCount || 0,
+      type: String(l.type || l.leaveType || l.LeaveType || l.leaveTypeId || 'annual').toLowerCase(),
+      employeeId: l.employeeId || l.EmployeeId || '',
+      employeeName: l.employeeName || l.EmployeeName || '',
+    };
+  };
+
+  const loadData = useCallback(async () => {
+    try {
+      setLoading(true);
+      const [attData, empData, deptData, colData, leaveData, permData] = await Promise.all([
+        attendanceService.getAttendanceLogs().catch(() => []),
+        employeesService.getEmployees().catch(() => []),
+        structureService.getDepartments().catch(() => []),
+        structureService.getColleges().catch(() => []),
+        leavesService.getLeaves().catch(() => []),
+        permissionsService.getPermissions().catch(() => [])
+      ]);
+      setAttendance(Array.isArray(attData) ? attData : []);
+      setEmployees(Array.isArray(empData) ? empData : []);
+      setDepartments(Array.isArray(deptData) ? deptData : []);
+      setColleges(Array.isArray(colData) ? colData : []);
+      setLeavesList(Array.isArray(leaveData) ? leaveData.map(normalizeLeave) : []);
+      setPermsList(Array.isArray(permData) ? permData : []);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   useEffect(()=>{
     const t2=setInterval(()=>setTime(new Date().toLocaleTimeString(lang==='ar'?'ar-EG':'en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:true})),1000);
@@ -43,35 +99,68 @@ function Dashboard({ t, lang, user, setActivePage }) {
     const fn=e=>{if(notifRef.current&&!notifRef.current.contains(e.target))setNotifOpen(false);};
     document.addEventListener('mousedown',fn);
     return()=>document.removeEventListener('mousedown',fn);
-  },[]);
+  },[]);  /* ─── Data Normalization ─── */
+  const getAttStatus = (st) => {
+    if (st === 0 || st === '0' || String(st).toLowerCase() === 'present') return 'present';
+    if (st === 1 || st === '1' || String(st).toLowerCase() === 'late') return 'late';
+    if (st === 2 || st === '2' || String(st).toLowerCase() === 'left') return 'left';
+    if (st === 3 || st === '3' || String(st).toLowerCase() === 'absent') return 'absent';
+    return String(st || '').toLowerCase();
+  };
 
-  /* ── Data ── */
-  const today     = new Date().toISOString().slice(0,10);
-  const todayAtt  = ATTENDANCE.filter(a=>a.date===today);
-  const total     = ATTENDANCE.length||1;
-  const present   = ATTENDANCE.filter(a=>a.status==='present'||a.status==='left').length;
-  const absent    = ATTENDANCE.filter(a=>a.status==='absent').length;
-  const late      = ATTENDANCE.filter(a=>a.status==='late').length;
-  const leftC     = ATTENDANCE.filter(a=>a.status==='left').length;
-  const attPct    = Math.round(present/total*100);
+  const getLeaveStatus = (st) => {
+    if (st === 0 || st === '0' || String(st).toLowerCase() === 'pending') return 'pending';
+    if (st === 1 || st === '1' || String(st).toLowerCase() === 'approved') return 'approved';
+    if (st === 2 || st === '2' || String(st).toLowerCase() === 'rejected') return 'rejected';
+    return String(st || '').toLowerCase();
+  };
 
-  const todayPres = todayAtt.filter(a=>a.status==='present'||a.status==='left').length;
-  const todayAbs  = todayAtt.filter(a=>a.status==='absent').length;
-  const todayLate = todayAtt.filter(a=>a.status==='late').length;
+  const todayDateStr = new Date().toISOString().slice(0, 10);
+  const todayAtt     = attendance.filter(a => String(a.date || a.Date || '').slice(0, 10) === todayDateStr);
+  const targetAtts   = todayAtt.length > 0 ? todayAtt : attendance;
+  const total        = targetAtts.length || 1;
 
-  const totalEmps    = EMPLOYEES.length;
-  const maleEmps     = EMPLOYEES.filter(e=>e.gender==='male').length;
-  const femaleEmps   = EMPLOYEES.filter(e=>e.gender==='female').length;
-  const academicEmps = EMPLOYEES.filter(e=>e.type==='academic').length;
-  const adminEmps    = EMPLOYEES.filter(e=>e.type==='administrative').length;
+  const present   = targetAtts.filter(a => getAttStatus(a.status || a.Status) === 'present' || getAttStatus(a.status || a.Status) === 'left').length;
+  const absent    = targetAtts.filter(a => getAttStatus(a.status || a.Status) === 'absent').length;
+  const late      = targetAtts.filter(a => getAttStatus(a.status || a.Status) === 'late').length;
+  const leftC     = targetAtts.filter(a => getAttStatus(a.status || a.Status) === 'left').length;
+  const attPct    = Math.round(present / total * 100);
 
-  const pendingLeaves = leavesList.filter(l=>l.status==='pending');
-  const pendingPerms  = permsList.filter(p=>p.status==='pending');
-  const todayOnLeave  = LEAVES.filter(l=>l.status==='approved'&&l.from<=today&&l.to>=today);
+  const todayPres = present;
+  const todayAbs  = absent;
+  const todayLate = late;
 
-  const deptStats = DEPARTMENTS.map(d=>{
-    const emps=EMPLOYEES.filter(e=>e.departmentId===d.id);
-    const atts=ATTENDANCE.filter(a=>emps.find(e=>e.id===a.employeeId));
+  const totalEmps    = employees.length;
+  const maleEmps     = employees.filter(e => {
+    const g = String(e.gender || e.genderName || '').toLowerCase();
+    return g === 'male' || g === 'ذكر' || e.gender === 1 || g === '1';
+  }).length;
+  const femaleEmps   = employees.filter(e => {
+    const g = String(e.gender || e.genderName || '').toLowerCase();
+    return g === 'female' || g === 'أنثى' || e.gender === 2 || g === '2';
+  }).length;
+
+  const academicEmps = employees.filter(e => {
+    const t = String(e.type || e.employeeType || e.jobType || '').toLowerCase();
+    return t === 'academic' || t === 'أكاديمي' || e.type === 1 || t === '1';
+  }).length;
+  const adminEmps    = employees.filter(e => {
+    const t = String(e.type || e.employeeType || e.jobType || '').toLowerCase();
+    return t === 'administrative' || t === 'admin' || t === 'إداري' || e.type === 2 || t === '2';
+  }).length;
+
+  const pendingLeaves = leavesList.filter(l => getLeaveStatus(l.status || l.Status) === 'pending');
+  const pendingPerms  = permsList.filter(p => getLeaveStatus(p.status || p.Status) === 'pending');
+  const todayOnLeave  = leavesList.filter(l => {
+    const st = getLeaveStatus(l.status || l.Status);
+    const from = String(l.fromDate || l.from || '').slice(0, 10);
+    const to = String(l.toDate || l.to || '').slice(0, 10);
+    return st === 'approved' && from <= todayDateStr && to >= todayDateStr;
+  });
+
+  const deptStats = departments.map(d=>{
+    const emps=employees.filter(e=>e.departmentId===d.id || e.department===d.name);
+    const atts=attendance.filter(a=>emps.find(e=>e.id===a.employeeId || e.name===a.employeeName));
     const p=atts.filter(a=>a.status==='present'||a.status==='left').length;
     return {...d,count:emps.length,present:p,absent:atts.filter(a=>a.status==='absent').length,late:atts.filter(a=>a.status==='late').length,pct:atts.length?Math.round(p/atts.length*100):0};
   }).filter(d=>d.count>0).sort((a,b)=>b.pct-a.pct);
@@ -80,10 +169,17 @@ function Dashboard({ t, lang, user, setActivePage }) {
   const months = Array.from({length:6}).map((_,i)=>{
     const d=new Date(); d.setMonth(d.getMonth()-5+i);
     const m=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
-    const mAtt=ATTENDANCE.filter(a=>a.date?.startsWith(m));
+    const mAtt=attendance.filter(a=>a.date?.startsWith(m));
     const mPres=mAtt.filter(a=>a.status==='present'||a.status==='left').length;
     return {m,label:d.toLocaleDateString(lang==='ar'?'ar-EG':'en-US',{month:'short'}),pct:mAtt.length?Math.round(mPres/mAtt.length*100):0};
   });
+
+  const EMPLOYEES = employees;
+  const ATTENDANCE = attendance;
+  const LEAVES = leavesList;
+  const PERMISSIONS = permsList;
+  const DEPARTMENTS = departments;
+  const COLLEGES = colleges;
 
   // Smart alerts
   const alerts = [];
@@ -393,7 +489,11 @@ function Dashboard({ t, lang, user, setActivePage }) {
                 const slices=[{v:d.present,color:'#16A34A'},{v:d.count-d.present,color:'#DC2626'}];
                 let cum2=0; const pc=barC(d.pct);
                 return(
-                  <div key={d.id} style={{display:'flex',flexDirection:'column',alignItems:'center',gap:'6px',padding:'12px 8px',borderRadius:'12px',border:`1px solid ${pc}22`,background:'white',transition:'all .2s',cursor:'default'}}
+                  <div key={d.id} style={{display:'flex',flexDirection:'column',alignItems:'center',gap:'6px',padding:'12px 8px',borderRadius:'12px',border:`1px solid ${pc}22`,background:'white',transition:'all .2s',cursor:'pointer'}}
+                    onClick={()=>{
+                      const emps = employees.filter(e => e.departmentId === d.id || e.department === d.name);
+                      setDeptModal({ dept: d, emps, stats: { present: d.present, absent: d.absent, late: d.late, leave: 0 }, onLeaveToday: [], SM2: { present:{c:'#166534',bg:'#DCFCE7',bd:'#BBF7D0'}, late:{c:'#B45309',bg:'#FEF3C7',bd:'#FDE68A'}, left:{c:'#1565C0',bg:'#DBEAFE',bd:'#BFDBFE'}, absent:{c:'#991B1B',bg:'#FEE2E2',bd:'#FECACA'}, leave:{c:'#6B21A8',bg:'#EDE9FE',bd:'#DDD6FE'} } });
+                    }}
                     onMouseEnter={e=>{e.currentTarget.style.transform='translateY(-2px)';e.currentTarget.style.boxShadow=`0 6px 14px ${pc}22`;}}
                     onMouseLeave={e=>{e.currentTarget.style.transform='translateY(0)';e.currentTarget.style.boxShadow='none';}}>
                     <div style={{position:'relative',width:'70px',height:'70px'}}>

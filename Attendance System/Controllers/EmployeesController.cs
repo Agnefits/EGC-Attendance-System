@@ -28,24 +28,20 @@ namespace Attendance_System.Controllers
             [FromQuery] int page = 1,
             [FromQuery] int pageSize = 20)
         {
-            var allEmployees = await _unitOfWork.Employees.GetAllAsync();
-
-            var query = allEmployees
-                .Where(e => e.DeletedAt == null)
-                .AsQueryable();
+            var allEmployees = (await _unitOfWork.Employees.GetAllWithRelationsAsync()).AsQueryable();
 
             if (!string.IsNullOrEmpty(departmentId))
-                query = query.Where(e => e.DepartmentId == departmentId);
+                allEmployees = allEmployees.Where(e => e.DepartmentId == departmentId);
             if (!string.IsNullOrEmpty(collegeId))
-                query = query.Where(e => e.CollegeId == collegeId);
+                allEmployees = allEmployees.Where(e => e.CollegeId == collegeId);
             if (!string.IsNullOrEmpty(status))
-                query = query.Where(e => e.Status == status);
+                allEmployees = allEmployees.Where(e => e.Status == status);
             if (!string.IsNullOrEmpty(search))
-                query = query.Where(e => e.Name.Contains(search) || e.NameEn.Contains(search) || e.Email.Contains(search));
+                allEmployees = allEmployees.Where(e => e.Name.Contains(search) || e.NameEn.Contains(search) || e.Email.Contains(search));
 
-            var total = query.Count();
+            var total = allEmployees.Count();
 
-            var employees = query
+            var employees = allEmployees
                 .OrderBy(e => e.Name)
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
@@ -62,6 +58,8 @@ namespace Attendance_System.Controllers
                     AcademicRank = e.AcademicRank,
                     HeadType = e.HeadType,
                     Status = e.Status,
+                    DepartmentId = e.DepartmentId,
+                    CollegeId = e.CollegeId,
                     Department = e.Department != null ? e.Department.Name : null,
                     College = e.College != null ? e.College.Name : null,
                     HasUserAccount = e.User != null,
@@ -105,6 +103,8 @@ namespace Attendance_System.Controllers
                 AcademicRank = employee.AcademicRank,
                 HeadType = employee.HeadType,
                 Status = employee.Status,
+                DepartmentId = employee.DepartmentId,
+                CollegeId = employee.CollegeId,
                 Department = employee.Department?.Name,
                 College = employee.College?.Name,
                 User = employee.User != null ? new EmployeeUserSummaryDto
@@ -171,10 +171,10 @@ namespace Attendance_System.Controllers
             employee.Gender = dto.Gender ?? employee.Gender;
             employee.RoleClassification = dto.RoleClassification ?? employee.RoleClassification;
             employee.Type = dto.Type ?? employee.Type;
-            employee.AcademicRank = dto.AcademicRank ?? employee.AcademicRank;
-            employee.DepartmentId = dto.DepartmentId ?? employee.DepartmentId;
-            employee.CollegeId = dto.CollegeId ?? employee.CollegeId;
-            employee.HeadType = dto.HeadType ?? employee.HeadType;
+            employee.AcademicRank = dto.AcademicRank;           // allow clearing to null
+            employee.DepartmentId = dto.DepartmentId;           // allow clearing to null
+            employee.CollegeId = dto.CollegeId;                 // allow clearing to null
+            employee.HeadType = dto.HeadType;                   // allow clearing to null
             employee.Status = dto.Status ?? employee.Status;
             employee.UpdatedAt = DateTime.Now;
 

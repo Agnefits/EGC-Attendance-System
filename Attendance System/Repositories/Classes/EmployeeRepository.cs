@@ -29,6 +29,17 @@ namespace Attendance_System.Repositories.Classes
             return await _dbSet.Where(e => e.CollegeId == collegeId && e.DeletedAt == null).ToListAsync();
         }
 
+        public async Task<IEnumerable<Employee>> GetAllWithRelationsAsync()
+        {
+            return await _dbSet
+                .Include(e => e.Department)
+                .Include(e => e.College)
+                .Include(e => e.User)
+                .Where(e => e.DeletedAt == null)
+                .OrderBy(e => e.Name)
+                .ToListAsync();
+        }
+
         public async Task<Employee?> GetEmployeeWithDepartmentAndCollegeAsync(string employeeId)
         {
             return await _dbSet

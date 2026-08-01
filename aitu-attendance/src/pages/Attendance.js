@@ -1,16 +1,16 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { EMPLOYEES, ATTENDANCE, DEPARTMENTS, PERMISSIONS } from '../data';
+import { attendanceService, employeesService, structureService } from '../services';
 
-/* ─────────────────────────────────────────────────────────────
+/* ============================================================================
    Constants
-───────────────────────────────────────────────────────────── */
+============================================================================ */
 const CAMPUS_LAT  = 27.184187;
 const CAMPUS_LNG  = 31.172920;
 const CAMPUS_RADIUS = 500; // meters
 
-/* ─────────────────────────────────────────────────────────────
+/* ============================================================================
    Haversine distance (meters)
-───────────────────────────────────────────────────────────── */
+============================================================================ */
 function calcDistance(lat1, lng1, lat2, lng2) {
   const R = 6371000;
   const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -20,13 +20,9 @@ function calcDistance(lat1, lng1, lat2, lng2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 }
 
-/* ─────────────────────────────────────────────────────────────
+/* ============================================================================
    Multi-strategy GPS resolver
-   Tries 4 methods in order, resolves with {lat, lng, method}
-   or rejects with { code, message }
-───────────────────────────────────────────────────────────── */
-// Is the page served over a secure origin? Geolocation only works on
-// https:// or localhost — NOT on http://192.168.x.x (LAN IP).
+============================================================================ */
 function isSecureOrigin() {
   if (typeof window === 'undefined') return false;
   if (window.isSecureContext) return true;
@@ -36,74 +32,47 @@ function isSecureOrigin() {
 
 function resolveLocation(lang) {
   return new Promise((resolve, reject) => {
-
-    // Block early on insecure origin — the browser will silently deny
-    // geolocation, so give a clear, actionable message instead.
     if (!isSecureOrigin()) {
       reject({ code: 'insecure', message: lang==='ar'
-        ? '⚠️ تحديد الموقع يتطلب اتصالاً آمناً (HTTPS)\nالموقع مفتوح حالياً عبر اتصال غير آمن، لذلك يرفض المتصفح الوصول للموقع.\nافتح النظام عبر رابط https.'
+        ? '⚠️ يتطلب تحديد الموقع اتصالاً آمناً (HTTPS)\nالنظام مفتوح حالياً عبر اتصال غير آمن، لذا يمنع المتصفح الوصول للموقع.\nافتح النظام عبر رابط https.'
         : '⚠️ Location requires a secure connection (HTTPS)\nThe app is currently opened over an insecure connection, so the browser blocks location access.\nOpen the system via an https link.' });
       return;
     }
 
     if (!navigator.geolocation) {
-      reject({ code: 0, message: lang==='ar'
-        ? 'المتصفح لا يدعم تحديد الموقع'
-        : 'Geolocation not supported' });
+      reject({ code: 0, message: lang==='ar' ? 'المتصفح لا يدعم تحديد الموقع' : 'Geolocation not supported' });
       return;
     }
 
     let resolved = false;
-
     function done(lat, lng, accuracy, method) {
       if (resolved) return;
       resolved = true;
       resolve({ lat, lng, accuracy, method });
     }
 
-    function fail(code, message) {
-      if (resolved) return;
-      resolved = true;
-      reject({ code, message });
-    }
-
-    const msgs = {
-      ar: {
-        1: 'لم يتم السماح بالوصول للموقع\nيرجى تفعيل إذن الموقع من إعدادات المتصفح أو الجهاز',
-        2: 'تعذر تحديد موقعك\nتأكد من تفعيل GPS أو الاتصال بالإنترنت',
-        3: 'انتهت مهلة تحديد الموقع\nيرجى المحاولة مرة أخرى',
-      },
-      en: {
-        1: 'Location permission denied\nEnable location in browser/device settings',
-        2: 'Could not get location\nMake sure GPS or internet is enabled',
-        3: 'Location timeout\nPlease try again',
-      }
-    };
-
-    // ── Method 1: High accuracy GPS (best for phones) ──
     navigator.geolocation.getCurrentPosition(
       pos => done(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy, 'gps-high'),
-      () => {
-        // ── Method 2: Low accuracy / Network (works on laptops) ──
+      err => {
         navigator.geolocation.getCurrentPosition(
           pos => done(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy, 'network'),
-          err => {
-            const code = err?.code || 2;
-            fail(code, (msgs[lang]||msgs.ar)[code] || (lang==='ar'?'تعذر تحديد الموقع':'Could not get location'));
-          },
-          { enableHighAccuracy: false, timeout: 15000, maximumAge: 0 }
+          err2 => reject({ code: err2.code, message: lang==='ar' ? 'فشل الحصول على الموقع الجغرافي' : 'Failed to obtain GPS location' }),
+          { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 }
         );
       },
-      { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
     );
   });
 }
 
-/* ═══════════════════════════════════════════════════════════
+/* ============================================================================
    COMPONENT
-═══════════════════════════════════════════════════════════ */
+============================================================================ */
 function Attendance({ t, lang, user }) {
-  const [attendance, setAttendance] = useState(ATTENDANCE);
+  const [attendance, setAttendance] = useState([]);
+  const [employees, setEmployees]   = useState([]);
+  const [departments, setDepartments] = useState([]);
+  const [loading, setLoading]       = useState(true);
   const [time, setTime]             = useState('');
   const [date, setDate]             = useState('');
   const [gpsState, setGpsState]     = useState('idle'); // idle | loading | success | error
@@ -112,6 +81,28 @@ function Attendance({ t, lang, user }) {
   const [distance, setDistance]     = useState(null);
 
   const dir = lang==='ar' ? 'rtl' : 'ltr';
+
+  const loadData = useCallback(async () => {
+    try {
+      setLoading(true);
+      const [attData, empData, deptData] = await Promise.all([
+        attendanceService.getAttendanceLogs().catch(() => []),
+        employeesService.getEmployees().catch(() => []),
+        structureService.getDepartments().catch(() => [])
+      ]);
+      setAttendance(Array.isArray(attData) ? attData : []);
+      setEmployees(Array.isArray(empData) ? empData : []);
+      setDepartments(Array.isArray(deptData) ? deptData : []);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   /* Clock */
   useEffect(() => {
@@ -127,17 +118,12 @@ function Attendance({ t, lang, user }) {
 
   /* Employee data */
   const today      = new Date().toISOString().split('T')[0];
-  const myRecord   = attendance.find(a => a.employeeId === user.employeeId && a.date === today)
-                  || attendance.find(a => a.employeeId === user.employeeId); // fallback to any record
+  const myRecord   = attendance.find(a => (a.employeeId === user.employeeId || a.employeeId === user.id) && a.date === today)
+                  || attendance.find(a => a.employeeId === user.employeeId || a.employeeId === user.id);
   const checkedIn  = !!myRecord?.checkIn;
   const checkedOut = !!myRecord?.checkOut;
-  const myEmp      = EMPLOYEES.find(e => e.id === user.employeeId);
-  const myDept     = DEPARTMENTS.find(d => d.id === myEmp?.departmentId);
-
-  // Permissions this month
-  const thisMonth  = new Date().toISOString().slice(0,7);
-  const myPerms    = (PERMISSIONS||[]).filter(p => p.employeeId===user.employeeId && p.date?.startsWith(thisMonth) && p.status==='approved');
-  const usedPermsMin = myPerms.reduce((s,p)=>s+(p.duration||0), 0);
+  const myEmp      = employees.find(e => e.id === user.employeeId || e.id === user.id);
+  const myDept     = departments.find(d => d.id === myEmp?.departmentId || d.name === myEmp?.department);
 
   const STATUS_META = {
     present: { label:lang==='ar'?'حاضر':'Present',  color:'#14532D', bg:'#DCFCE7', border:'#BBF7D0' },
@@ -145,34 +131,6 @@ function Attendance({ t, lang, user }) {
     left:    { label:lang==='ar'?'انصرف':'Left',    color:'#1565C0', bg:'#DBEAFE', border:'#BFDBFE' },
     absent:  { label:lang==='ar'?'غائب':'Absent',   color:'#991B1B', bg:'#FEE2E2', border:'#FECACA' },
   };
-
-  /* Time helper */
-  function to12h(d) {
-    let h = d.getHours(), m = d.getMinutes();
-    const ampm = h>=12 ? (lang==='ar'?'م':'PM') : (lang==='ar'?'ص':'AM');
-    h = h%12||12;
-    return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')} ${ampm}`;
-  }
-
-  /* Record check-in */
-  function doCheckIn() {
-    const now     = new Date();
-    const timeStr = to12h(now);
-    const isLate  = now.getHours()>8 || (now.getHours()===8 && now.getMinutes()>15);
-    const today   = now.toISOString().split('T')[0];
-    if (myRecord) {
-      setAttendance(p => p.map(a => a.employeeId===user.employeeId
-        ? {...a, checkIn:timeStr, status:isLate?'late':'present'}
-        : a));
-    } else {
-      setAttendance(p => [...p, {
-        id:'ATT_'+user.employeeId+'_'+Date.now(),
-        employeeId:user.employeeId,
-        date:today, checkIn:timeStr, checkOut:null,
-        status:isLate?'late':'present',
-      }]);
-    }
-  }
 
   /* Main check-in handler */
   const handleCheckIn = useCallback(async () => {
@@ -187,7 +145,6 @@ function Attendance({ t, lang, user }) {
       setDistance(Math.round(dist));
       setGpsMethod(method);
 
-      // Add GPS accuracy margin so users at the edge aren't wrongly rejected
       const margin = Math.min(accuracy || 0, 200);
       const allowedRadius = CAMPUS_RADIUS + margin;
 
@@ -199,7 +156,13 @@ function Attendance({ t, lang, user }) {
         return;
       }
 
-      doCheckIn();
+      await attendanceService.checkIn({
+        latitude: lat,
+        longitude: lng,
+        gpsAccuracy: accuracy,
+        resolutionMethod: method
+      });
+
       setGpsState('success');
       const methodLabel = {
         'gps-high': lang==='ar'?'GPS':'GPS',
@@ -208,22 +171,26 @@ function Attendance({ t, lang, user }) {
       setGpsMsg(lang==='ar'
         ? `✅ تم التحقق من موقعك (${methodLabel[method]}) — المسافة ${Math.round(dist)} متر`
         : `✅ Location verified (${methodLabel[method]}) — ${Math.round(dist)}m from campus`);
+      loadData();
 
     } catch ({ code, message }) {
       setGpsState('error');
-      setGpsMsg(message);
+      setGpsMsg(message || (lang==='ar' ? 'فشل تسجيل الحضور' : 'Check-in failed'));
     }
-  }, [checkedIn, gpsState, lang]);
+  }, [checkedIn, gpsState, lang, loadData]);
 
   /* Check-out */
-  function handleCheckOut() {
-    const now     = new Date();
-    const timeStr = to12h(now);
-    setAttendance(p => p.map(a => a.employeeId===user.employeeId
-      ? {...a, checkOut:timeStr, status:'left'}
-      : a));
-    setGpsState('idle');
-    setGpsMsg('');
+  async function handleCheckOut() {
+    if (!myRecord?.id) return;
+    try {
+      await attendanceService.checkOut(myRecord.id);
+      setGpsState('idle');
+      setGpsMsg('');
+      loadData();
+    } catch (err) {
+      setGpsState('error');
+      setGpsMsg(err.message || (lang==='ar' ? 'فشل تسجيل الانصراف' : 'Check-out failed'));
+    }
   }
 
   /* Steps */
@@ -452,26 +419,28 @@ function Attendance({ t, lang, user }) {
                 {attendance
                   .filter(a => {
                     if (user.role==='head') {
-                      const e = EMPLOYEES.find(x => x.id===a.employeeId);
-                      return e && e.departmentId===user.departmentId;
+                      const e = employees.find(x => x.id===a.employeeId || x.name===a.employeeName);
+                      return e && (e.departmentId===user.departmentId || e.department===user.department);
                     }
                     return true;
                   })
                   .map((a,idx) => {
-                    const emp  = EMPLOYEES.find(e => e.id===a.employeeId);
-                    const dept = DEPARTMENTS.find(d => d.id===emp?.departmentId);
+                    const emp  = employees.find(e => e.id===a.employeeId || e.name===a.employeeName);
+                    const dept = departments.find(d => d.id===emp?.departmentId || d.name===(emp?.department || a.department));
                     const sm   = STATUS_META[a.status];
+                    const empName = (lang==='en' ? (emp?.nameEn || a.employeeName) : (emp?.name || a.employeeName)) || a.employeeName || '—';
+                    const deptName = (lang==='en' ? (dept?.nameEn || a.department) : (dept?.name || a.department)) || a.department || '—';
                     return (
-                      <tr key={a.id}
+                      <tr key={a.id || idx}
                         style={{background:idx%2===0?'white':'#FAFBFC',transition:'background .15s'}}
                         onMouseEnter={e=>e.currentTarget.style.background='#F0F7FF'}
                         onMouseLeave={e=>e.currentTarget.style.background=idx%2===0?'white':'#FAFBFC'}>
-                        <td style={tdS({textAlign:lang==='ar'?'right':'left',fontWeight:'700',color:'#0F172A'})}>{lang==='en'?emp?.nameEn:emp?.name}</td>
-                        <td style={tdS({color:'#1565C0',fontWeight:'600',fontSize:'12px'})}>{lang==='en'?dept?.nameEn:dept?.name}</td>
+                        <td style={tdS({textAlign:lang==='ar'?'right':'left',fontWeight:'700',color:'#0F172A'})}>{empName}</td>
+                        <td style={tdS({color:'#1565C0',fontWeight:'600',fontSize:'12px'})}>{deptName}</td>
                         <td style={tdS({direction:'ltr',color:'#14532D',fontWeight:'700'})}>{a.checkIn||'—'}</td>
                         <td style={tdS({direction:'ltr',color:'#1565C0',fontWeight:'700'})}>{a.checkOut||'—'}</td>
                         <td style={tdS()}>
-                          <span style={{background:sm?.bg,color:sm?.color,border:`1px solid ${sm?.border}`,padding:'3px 10px',borderRadius:'999px',fontSize:'11px',fontWeight:'700'}}>{sm?.label}</span>
+                          <span style={{background:sm?.bg||'#F1F5F9',color:sm?.color||'#475569',border:`1px solid ${sm?.border||'#E2E8F0'}`,padding:'3px 10px',borderRadius:'999px',fontSize:'11px',fontWeight:'700'}}>{sm?.label||a.status}</span>
                         </td>
                       </tr>
                     );

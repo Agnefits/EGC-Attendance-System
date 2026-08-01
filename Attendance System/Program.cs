@@ -48,12 +48,12 @@ namespace Attendance_System
             // Note: Add Attendance Notification Service (Background Service)
             // builder.Services.AddHostedService<AttendanceNotificationService>();
 
-            // CORS — allow the React front-end to call the API.
+            // CORS â€” allow the React front-end to call the API.
             // Adjust the origin(s) to match where the front-end is served.
             builder.Services.AddCors(options =>
             {
                 options.AddPolicy("frontend", policy => policy
-                    .WithOrigins("http://localhost:3000", "https://localhost:3000")
+                    .SetIsOriginAllowed(_ => true).AllowCredentials()
                     .AllowAnyHeader()
                     .AllowAnyMethod());
             });
@@ -125,7 +125,7 @@ namespace Attendance_System
 
             var app = builder.Build();
 
-            // Global exception handling — must be first so it wraps the whole pipeline.
+            // Global exception handling â€” must be first so it wraps the whole pipeline.
             app.UseMiddleware<ExceptionMiddleware>();
 
             // Auto Migration & Data Seeding
@@ -139,10 +139,13 @@ namespace Attendance_System
                 c.RoutePrefix = "swagger";
             });
 
-            app.UseHttpsRedirection();
-
             // CORS must run before authentication/authorization.
             app.UseCors("frontend");
+
+            if (!app.Environment.IsDevelopment())
+            {
+                app.UseHttpsRedirection();
+            }
 
             app.UseAuthentication();
             app.UseAuthorization();

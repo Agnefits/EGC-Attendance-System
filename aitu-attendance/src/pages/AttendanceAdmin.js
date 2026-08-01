@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { EMPLOYEES, ATTENDANCE, DEPARTMENTS } from '../data';
+import React, { useState, useEffect, useCallback } from 'react';
+import { attendanceService, employeesService, structureService } from '../services';
 
 const ADMIN_DEPTS = [
   { id:'HR',     name:'الموارد البشرية',    nameEn:'Human Resources'   },
@@ -34,7 +34,10 @@ function Modal({ open, onClose, lang, title, subtitle, footer, children }) {
 }
 
 function AttendanceAdmin({ lang, readOnly=false }) {
-  const [attendance]   = useState(ATTENDANCE);
+  const [attendance,   setAttendance]   = useState([]);
+  const [employees,    setEmployees]    = useState([]);
+  const [departments,  setDepartments]  = useState([]);
+  const [loading,      setLoading]      = useState(true);
   const [filterDept,   setFilterDept]   = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
   const [search,       setSearch]       = useState('');
@@ -42,6 +45,28 @@ function AttendanceAdmin({ lang, readOnly=false }) {
   const [showModal,    setShowModal]    = useState(false);
   const [deptOpen,     setDeptOpen]     = useState(false);
   const [statusOpen,   setStatusOpen]   = useState(false);
+
+  const loadData = useCallback(async () => {
+    try {
+      setLoading(true);
+      const [attData, empData, deptData] = await Promise.all([
+        attendanceService.getAttendanceLogs().catch(() => []),
+        employeesService.getEmployees().catch(() => []),
+        structureService.getDepartments().catch(() => [])
+      ]);
+      setAttendance(Array.isArray(attData) ? attData : []);
+      setEmployees(Array.isArray(empData) ? empData : []);
+      setDepartments(Array.isArray(deptData) ? deptData : []);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
   const statusRef = React.useRef(null);
   React.useEffect(()=>{
     if(!statusOpen) return;
@@ -69,28 +94,41 @@ function AttendanceAdmin({ lang, readOnly=false }) {
     absent: {label:lang==='ar'?'غائب' :'Absent', color:'#991B1B',bg:'#FEE2E2',border:'#FECACA'},
   };
 
-  const total      = attendance.length;
-  const present    = attendance.filter(a=>a.status==='present'||a.status==='left').length;
-  const absent     = attendance.filter(a=>a.status==='absent').length;
-  const late       = attendance.filter(a=>a.status==='late').length;
-  const leftCount  = attendance.filter(a=>a.status==='left').length;
-  const pct        = total?Math.round(present/total*100):0;
+  const getAttStatus = (st) => {
+    if (st === 0 || st === '0' || String(st).toLowerCase() === 'present') return 'present';
+    if (st === 1 || st === '1' || String(st).toLowerCase() === 'late') return 'late';
+    if (st === 2 || st === '2' || String(st).toLowerCase() === 'left') return 'left';
+    if (st === 3 || st === '3' || String(st).toLowerCase() === 'absent') return 'absent';
+    return String(st || '').toLowerCase();
+  };
 
-  const filtered = attendance.filter(att=>{
-    const emp  = EMPLOYEES.find(e=>e.id===att.employeeId);
-    const name = (lang==='en'?emp?.nameEn:emp?.name)||'';
-    return (!search||name.includes(search))&&
-           (filterDept==='all'||emp?.departmentId===filterDept)&&
-           (filterStatus==='all'||att.status===filterStatus)&&
-           (!filterDate||att.date===filterDate);
+  const EMPLOYEES = employees;
+  const DEPARTMENTS = departments;
+
+  const total      = attendance.length;
+  const present    = attendance.filter(a => getAttStatus(a.status || a.Status) === 'present' || getAttStatus(a.status || a.Status) === 'left').length;
+  const absent     = attendance.filter(a => getAttStatus(a.status || a.Status) === 'absent').length;
+  const late       = attendance.filter(a => getAttStatus(a.status || a.Status) === 'late').length;
+  const leftCount  = attendance.filter(a => getAttStatus(a.status || a.Status) === 'left').length;
+  const pct        = total ? Math.round(present / total * 100) : 0;
+
+  const filtered = attendance.filter(att => {
+    const emp  = employees.find(e => e.id === att.employeeId || e.name === att.employeeName);
+    const name = (lang === 'en' ? (emp?.nameEn || att.employeeName) : (emp?.name || att.employeeName)) || '';
+    const st   = getAttStatus(att.status || att.Status);
+    const date = String(att.date || att.Date || '').slice(0, 10);
+    return (!search || name.toLowerCase().includes(search.toLowerCase())) &&
+           (filterDept === 'all' || emp?.departmentId === filterDept || att.department === filterDept) &&
+           (filterStatus === 'all' || st === filterStatus) &&
+           (!filterDate || date === filterDate);
   });
 
   const popupFiltered = attendance.filter(att=>{
-    const emp  = EMPLOYEES.find(e=>e.id===att.employeeId);
-    const name = (lang==='en'?emp?.nameEn:emp?.name)||'';
-    return (!popupSearch||name.includes(popupSearch))&&
+    const emp  = employees.find(e=>e.id===att.employeeId || e.name===att.employeeName);
+    const name = (lang==='en'?(emp?.nameEn||att.employeeName):(emp?.name||att.employeeName))||'';
+    return (!popupSearch||name.toLowerCase().includes(popupSearch.toLowerCase()))&&
            (popupFilter==='all'||att.status===popupFilter)&&
-           (popupDept==='all'||emp?.departmentId===popupDept);
+           (popupDept==='all'||emp?.departmentId===popupDept||att.department===popupDept);
   });
 
   function exportExcel(data) {

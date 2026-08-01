@@ -69,11 +69,16 @@ const emptyForm = {
   collegeId:'', departmentId:'', adminDepartmentId:'', headType:'academic',
 };
 
-export default function AddEmployeeForm({ lang, onSave, onCancel }) {
+export default function AddEmployeeForm({ lang, onSave, onCancel, colleges = [], departments = [] }) {
   const dir = lang==='ar' ? 'rtl' : 'ltr';
   const ar  = lang==='ar';
   const [form,   setForm]   = useState(emptyForm);
   const [errors, setErrors] = useState({});
+
+  const ALL_COLLEGES = colleges.length > 0 ? colleges : COLLEGES;
+  const ALL_DEPTS = departments.length > 0 ? departments : DEPARTMENTS;
+  const ADMIN_DEPTS_LIST = ALL_DEPTS.filter(d => d.deptType === 2 || String(d.deptType).toLowerCase() === 'administrative' || d.deptType === 'admin' || !d.collegeId);
+  const ADMIN_DEPTS_FINAL = ADMIN_DEPTS_LIST.length > 0 ? ADMIN_DEPTS_LIST : (ADMIN_DEPTS || ALL_DEPTS);
 
   // Close on Escape
   useEffect(() => {
@@ -88,10 +93,22 @@ export default function AddEmployeeForm({ lang, onSave, onCancel }) {
     if (!form.nameEn) e.nameEn = ar?'الاسم الإنجليزي مطلوب':'English name required';
     if (!form.email)  e.email  = ar?'البريد مطلوب':'Email required';
     if (!form.phone)  e.phone  = ar?'الهاتف مطلوب':'Phone required';
-    if ((form.role==='academic'||form.role==='dean') && !form.collegeId)    e.collegeId    = ar?'الكلية مطلوبة':'College required';
-    if ((form.role==='academic'||form.role==='dean') && !form.departmentId) e.departmentId = ar?'القسم مطلوب':'Dept required';
-    if (form.role==='administrative' && !form.adminDepartmentId) e.adminDepartmentId = ar?'الإدارة مطلوبة':'Admin dept required';
-    if (form.role==='head_department' && !form.departmentId) e.departmentId = ar?'القسم مطلوب':'Dept required';
+    
+    if (form.role === 'academic') {
+      if (!form.collegeId)    e.collegeId    = ar?'الكلية مطلوبة':'College required';
+      if (!form.departmentId) e.departmentId = ar?'القسم مطلوب':'Dept required';
+    } else if (form.role === 'dean') {
+      if (!form.collegeId)    e.collegeId    = ar?'الكلية مطلوبة':'College required';
+    } else if (form.role === 'administrative') {
+      if (!form.adminDepartmentId && !form.departmentId) e.adminDepartmentId = ar?'الإدارة مطلوبة':'Admin dept required';
+    } else if (form.role === 'head_department') {
+      if (form.headType === 'administrative') {
+        if (!form.adminDepartmentId && !form.departmentId) e.adminDepartmentId = ar?'الإدارة مطلوبة':'Admin dept required';
+      } else {
+        if (!form.collegeId)    e.collegeId    = ar?'الكلية مطلوبة':'College required';
+        if (!form.departmentId) e.departmentId = ar?'القسم مطلوب':'Dept required';
+      }
+    }
     setErrors(e);
     return Object.keys(e).length === 0;
   }
@@ -101,8 +118,6 @@ export default function AddEmployeeForm({ lang, onSave, onCancel }) {
     onSave({
       ...form,
       id: 'EMP' + Date.now(),
-      type: form.role === 'administrative' ? 'administrative' : 'academic',
-      departmentId: form.role==='administrative' ? form.adminDepartmentId : form.departmentId,
       status: 'active',
     });
     setForm(emptyForm);
@@ -268,50 +283,78 @@ export default function AddEmployeeForm({ lang, onSave, onCancel }) {
             </Field>
           )}
 
-          {/* Academic / Dean: College + Dept */}
-          {(form.role==='academic'||form.role==='dean')&&(
+          {/* Academic: College + Dept */}
+          {form.role==='academic'&&(
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'11px' }}>
               <Field label={ar?'الكلية':'College'} required error={errors.collegeId}>
                 <select data-k="collegeId" value={form.collegeId} onChange={e=>setForm(p=>({...p,collegeId:e.target.value,departmentId:''}))} onFocus={F} onBlur={B} style={inputBase(errors.collegeId)}>
                   <option value="">{ar?'اختر الكلية':'Select College'}</option>
-                  {COLLEGES.map(c=><option key={c.id} value={c.id}>{lang==='en'?c.nameEn:c.name}</option>)}
+                  {ALL_COLLEGES.map(c=><option key={c.id} value={c.id}>{lang==='en'?c.nameEn:c.name}</option>)}
                 </select>
               </Field>
               <Field label={ar?'القسم':'Department'} required error={errors.departmentId} hint={!form.collegeId ? (ar?'اختر الكلية أولاً':'Select college first') : undefined}>
                 <select data-k="departmentId" value={form.departmentId} onChange={e=>setForm(p=>({...p,departmentId:e.target.value}))} onFocus={F} onBlur={B}
                   style={{...inputBase(errors.departmentId), opacity: form.collegeId ? 1 : .55, cursor: form.collegeId ? 'pointer' : 'not-allowed'}} disabled={!form.collegeId}>
                   <option value="">{ar?'اختر القسم':'Select Dept'}</option>
-                  {DEPARTMENTS.filter(d=>d.collegeId===form.collegeId).map(d=><option key={d.id} value={d.id}>{lang==='en'?d.nameEn:d.name}</option>)}
+                  {ALL_DEPTS.filter(d=>!form.collegeId || d.collegeId===form.collegeId).map(d=><option key={d.id} value={d.id}>{lang==='en'?d.nameEn:d.name}</option>)}
                 </select>
               </Field>
             </div>
           )}
 
+          {/* Dean: College only */}
+          {form.role==='dean'&&(
+            <Field label={ar?'الكلية':'College'} required error={errors.collegeId}>
+              <select data-k="collegeId" value={form.collegeId} onChange={e=>setForm(p=>({...p,collegeId:e.target.value,departmentId:''}))} onFocus={F} onBlur={B} style={inputBase(errors.collegeId)}>
+                <option value="">{ar?'اختر الكلية':'Select College'}</option>
+                {ALL_COLLEGES.map(c=><option key={c.id} value={c.id}>{lang==='en'?c.nameEn:c.name}</option>)}
+              </select>
+            </Field>
+          )}
+
           {/* Administrative: Admin Dept */}
           {form.role==='administrative'&&(
             <Field label={ar?'الإدارة':'Administration'} required error={errors.adminDepartmentId}>
-              <select data-k="adminDepartmentId" value={form.adminDepartmentId} onChange={e=>setForm(p=>({...p,adminDepartmentId:e.target.value}))} onFocus={F} onBlur={B} style={inputBase(errors.adminDepartmentId)}>
+              <select data-k="adminDepartmentId" value={form.adminDepartmentId} onChange={e=>setForm(p=>({...p,adminDepartmentId:e.target.value,departmentId:e.target.value}))} onFocus={F} onBlur={B} style={inputBase(errors.adminDepartmentId)}>
                 <option value="">{ar?'اختر الإدارة':'Select Admin Dept'}</option>
-                {ADMIN_DEPTS.map(d=><option key={d.id} value={d.id}>{lang==='en'?d.nameEn:d.name}</option>)}
+                {ADMIN_DEPTS_FINAL.map(d=><option key={d.id} value={d.id}>{lang==='en'?d.nameEn:d.name}</option>)}
               </select>
             </Field>
           )}
 
           {/* Head Department */}
           {form.role==='head_department'&&(
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'11px' }}>
+            <div style={{ display:'flex', flexDirection:'column', gap:'11px' }}>
               <Field label={ar?'نوع الرئاسة':'Head Type'}>
-                <select data-k="headType" value={form.headType||'academic'} onChange={e=>setForm(p=>({...p,headType:e.target.value,departmentId:'',adminDepartmentId:''}))} onFocus={F} onBlur={B} style={inputBase(false)}>
+                <select data-k="headType" value={form.headType||'academic'} onChange={e=>setForm(p=>({...p,headType:e.target.value,departmentId:'',adminDepartmentId:'',collegeId:''}))} onFocus={F} onBlur={B} style={inputBase(false)}>
                   <option value="academic">       {ar?'رئيس قسم أكاديمي':'Academic Head'}</option>
                   <option value="administrative"> {ar?'مدير إدارة':'Admin Manager'}</option>
                 </select>
               </Field>
-              <Field label={ar?'القسم':'Department'} required error={errors.departmentId}>
-                <select data-k="departmentId" value={form.departmentId||''} onChange={e=>setForm(p=>({...p,departmentId:e.target.value}))} onFocus={F} onBlur={B} style={inputBase(errors.departmentId)}>
-                  <option value="">{ar?'اختر القسم':'Select Dept'}</option>
-                  {(form.headType==='administrative'?ADMIN_DEPTS:DEPARTMENTS).map(d=><option key={d.id} value={d.id}>{lang==='en'?d.nameEn:d.name}</option>)}
-                </select>
-              </Field>
+
+              {form.headType==='academic' ? (
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'11px' }}>
+                  <Field label={ar?'الكلية':'College'} required error={errors.collegeId}>
+                    <select data-k="collegeId" value={form.collegeId} onChange={e=>setForm(p=>({...p,collegeId:e.target.value,departmentId:''}))} onFocus={F} onBlur={B} style={inputBase(errors.collegeId)}>
+                      <option value="">{ar?'اختر الكلية':'Select College'}</option>
+                      {ALL_COLLEGES.map(c=><option key={c.id} value={c.id}>{lang==='en'?c.nameEn:c.name}</option>)}
+                    </select>
+                  </Field>
+                  <Field label={ar?'القسم':'Department'} required error={errors.departmentId}>
+                    <select data-k="departmentId" value={form.departmentId||''} onChange={e=>setForm(p=>({...p,departmentId:e.target.value}))} onFocus={F} onBlur={B} style={inputBase(errors.departmentId)}>
+                      <option value="">{ar?'اختر القسم':'Select Dept'}</option>
+                      {ALL_DEPTS.filter(d=>!form.collegeId || d.collegeId===form.collegeId).map(d=><option key={d.id} value={d.id}>{lang==='en'?d.nameEn:d.name}</option>)}
+                    </select>
+                  </Field>
+                </div>
+              ) : (
+                <Field label={ar?'الإدارة':'Administration'} required error={errors.adminDepartmentId}>
+                  <select data-k="adminDepartmentId" value={form.adminDepartmentId||form.departmentId||''} onChange={e=>setForm(p=>({...p,adminDepartmentId:e.target.value,departmentId:e.target.value}))} onFocus={F} onBlur={B} style={inputBase(errors.adminDepartmentId)}>
+                    <option value="">{ar?'اختر الإدارة':'Select Admin Dept'}</option>
+                    {ADMIN_DEPTS_FINAL.map(d=><option key={d.id} value={d.id}>{lang==='en'?d.nameEn:d.name}</option>)}
+                  </select>
+                </Field>
+              )}
             </div>
           )}
 

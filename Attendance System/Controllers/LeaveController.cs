@@ -254,6 +254,63 @@ namespace Attendance_System.Controllers
             });
         }
 
+        [HttpPost("grant")]
+        [AuthorizedRoles(UserRole.Admin, UserRole.Hr)]
+        public async Task<IActionResult> GrantLeave([FromBody] GrantLeaveDto dto)
+        {
+            if (dto.TargetEmployeeIds == null || !dto.TargetEmployeeIds.Any())
+                return BadRequest(new { success = false, message = "No target employees specified" });
+
+            if (dto.ToDate < dto.FromDate)
+                return BadRequest(new { success = false, message = "End date is before start date" });
+
+            var grantorId = GetCurrentEmployeeId();
+            var daysCount = CountWorkDays(dto.FromDate, dto.ToDate);
+            if (daysCount <= 0)
+                return BadRequest(new { success = false, message = "Leave must include at least one working day" });
+
+            var created = 0;
+            var notFound = new List<string>();
+
+            foreach (var empId in dto.TargetEmployeeIds)
+            {
+                var employee = await _unitOfWork.Employees.GetByIdAsync(empId);
+                if (employee == null || employee.DeletedAt != null)
+                {
+                    notFound.Add(empId);
+                    continue;
+                }
+
+                var request = new LeaveRequest
+                {
+                    Id = Guid.NewGuid().ToString(),
+                    EmployeeId = empId,
+                    LeaveTypeId = "grant",
+                    FromDate = dto.FromDate,
+                    ToDate = dto.ToDate,
+                    DaysCount = daysCount,
+                    Reason = dto.Reason,
+                    GrantedByAdmin = true,
+                    ManagerId = grantorId,
+                    Status = LeaveStatus.Approved,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                };
+
+                await _unitOfWork.LeaveRequests.AddAsync(request);
+                created++;
+            }
+
+            await _unitOfWork.CompleteAsync();
+
+            return Ok(new
+            {
+                success = true,
+                message = $"Leave granted to {created} employee(s)",
+                data = new { created, notFound }
+            });
+        }
+
         [HttpPut("requests/{id}/approve")]
         [AuthorizedRoles(UserRole.Admin, UserRole.Hr, UserRole.Head)]
         public async Task<IActionResult> ApproveLeaveRequest(string id, [FromBody] ApproveLeaveDto dto)

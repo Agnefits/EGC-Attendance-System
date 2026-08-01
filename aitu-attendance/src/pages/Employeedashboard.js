@@ -1,7 +1,7 @@
 import { calcUsedPermsMins, getLeaveYearPeriod } from './leaveValidation';
 import useNotifications from './useNotifications';
 import React, { useState, useEffect, useRef } from 'react';
-import { EMPLOYEES, ATTENDANCE, DEPARTMENTS, COLLEGES, LEAVES, PERMISSIONS } from '../data';
+import { attendanceService, employeesService, leavesService, permissionsService, structureService } from '../services';
 
 const ATT={
   present:{l:{ar:'حاضر', en:'Present'},c:'#166534',bg:'#DCFCE7',bd:'#BBF7D0',dot:'#16A34A'},
@@ -229,10 +229,47 @@ function WeekSummary({lang,dir,schedule,card,mini=false}){
 
 export default function EmployeeDashboard({lang,user,setActivePage}){
   const dir=lang==='ar'?'rtl':'ltr';
-  const emp =EMPLOYEES.find(e=>e.id===user?.employeeId);
-  const dept=DEPARTMENTS.find(d=>d.id===emp?.departmentId);
-  const col =COLLEGES.find(c=>c.id===emp?.collegeId);
-  const role=ROLE[emp?.type||'employee'];
+
+  const [employees, setEmployees]     = useState([]);
+  const [departments, setDepartments] = useState([]);
+  const [colleges, setColleges]       = useState([]);
+  const [attendance, setAttendance]   = useState([]);
+  const [leavesList, setLeavesList]   = useState([]);
+  const [permsList, setPermsList]     = useState([]);
+  const [loading, setLoading]         = useState(true);
+
+  const loadData = React.useCallback(async () => {
+    try {
+      setLoading(true);
+      const [empData, deptData, colData, attData, leaveData, permData] = await Promise.all([
+        employeesService.getEmployees().catch(() => []),
+        structureService.getDepartments().catch(() => []),
+        structureService.getColleges().catch(() => []),
+        attendanceService.getAttendanceLogs().catch(() => []),
+        leavesService.getLeaves().catch(() => []),
+        permissionsService.getPermissions().catch(() => [])
+      ]);
+      setEmployees(Array.isArray(empData) ? empData : []);
+      setDepartments(Array.isArray(deptData) ? deptData : []);
+      setColleges(Array.isArray(colData) ? colData : []);
+      setAttendance(Array.isArray(attData) ? attData : []);
+      setLeavesList(Array.isArray(leaveData) ? leaveData : []);
+      setPermsList(Array.isArray(permData) ? permData : []);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  const emp = employees.find(e=>e.id===user?.employeeId || e.id===user?.id) || { name: user?.name, email: user?.email };
+  const dept= departments.find(d=>d.id===emp?.departmentId || d.name===emp?.department);
+  const col = colleges.find(c=>c.id===emp?.collegeId || c.name===emp?.college);
+  const role= ROLE[emp?.type||user?.role||'employee'];
 
   const [time,setTime]=useState('');
   const [greet,setGreet]=useState('');
@@ -284,9 +321,16 @@ export default function EmployeeDashboard({lang,user,setActivePage}){
     document.addEventListener('mousedown',fn);return()=>document.removeEventListener('mousedown',fn);
   },[]);
 
-  const myAtt  =ATTENDANCE.filter(a=>a.employeeId===user?.employeeId);
-  const myLv   =LEAVES.filter(l=>l.employeeId===user?.employeeId&&l.status==='approved');
-  const myPend =LEAVES.filter(l=>l.employeeId===user?.employeeId&&l.status==='pending');
+  const EMPLOYEES = employees;
+  const ATTENDANCE = attendance;
+  const LEAVES = leavesList;
+  const PERMISSIONS = permsList;
+  const DEPARTMENTS = departments;
+  const COLLEGES = colleges;
+
+  const myAtt  =ATTENDANCE.filter(a=>a.employeeId===user?.employeeId || a.employeeId===user?.id);
+  const myLv   =LEAVES.filter(l=>(l.employeeId===user?.employeeId||l.employeeId===user?.id)&&l.status==='approved');
+  const myPend =LEAVES.filter(l=>(l.employeeId===user?.employeeId||l.employeeId===user?.id)&&l.status==='pending');
   const thisMonth = new Date().toISOString().slice(0,7);
   const usedPermsMin = calcUsedPermsMins(user?.employeeId, PERMISSIONS);
   const todayR =myAtt[myAtt.length-1];

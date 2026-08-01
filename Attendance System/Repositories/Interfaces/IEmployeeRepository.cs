@@ -10,6 +10,7 @@ namespace Attendance_System.Repositories.Interfaces
         Task<IEnumerable<Employee>> GetByDepartmentIdAsync(string departmentId);
         Task<IEnumerable<Employee>> GetByCollegeIdAsync(string collegeId);
 
+        Task<IEnumerable<Employee>> GetAllWithRelationsAsync();
         Task<Employee?> GetEmployeeWithDepartmentAndCollegeAsync(string employeeId);
         Task<Employee?> GetEmployeeWithUserAsync(string employeeId);
         Task<Employee?> GetEmployeeWithDepartmentAndUserAsync(string employeeId);
