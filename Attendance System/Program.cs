@@ -10,6 +10,7 @@ using Attendance_System.Services.Interfaces;
 using Attendance_System.Services.Classes;
 using Attendance_System.Repositories.Interfaces;
 using Attendance_System.Repositories.Classes;
+using Attendance_System.Middleware;
 
 namespace Attendance_System
 {
@@ -43,9 +44,19 @@ namespace Attendance_System
             builder.Services.AddScoped<IJwtService, JwtService>();
             builder.Services.AddScoped<IEmailService, EmailService>();
             builder.Services.AddScoped<IValidationService, ValidationService>();
-            
+
             // Note: Add Attendance Notification Service (Background Service)
             // builder.Services.AddHostedService<AttendanceNotificationService>();
+
+            // CORS — allow the React front-end to call the API.
+            // Adjust the origin(s) to match where the front-end is served.
+            builder.Services.AddCors(options =>
+            {
+                options.AddPolicy("frontend", policy => policy
+                    .WithOrigins("http://localhost:3000", "https://localhost:3000")
+                    .AllowAnyHeader()
+                    .AllowAnyMethod());
+            });
 
             // Add JWT Authentication
             var jwtSettings = builder.Configuration.GetSection("JwtSettings");
@@ -80,9 +91,9 @@ namespace Attendance_System
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddSwaggerGen(c =>
             {
-                c.SwaggerDoc("v1", new OpenApiInfo 
-                { 
-                    Title = "AITU Attendance System API", 
+                c.SwaggerDoc("v1", new OpenApiInfo
+                {
+                    Title = "AITU Attendance System API",
                     Version = "v1",
                     Description = "RESTful API Backend Specification for Assiut International Technological University (AITU) Attendance Management System."
                 });
@@ -114,6 +125,9 @@ namespace Attendance_System
 
             var app = builder.Build();
 
+            // Global exception handling — must be first so it wraps the whole pipeline.
+            app.UseMiddleware<ExceptionMiddleware>();
+
             // Auto Migration & Data Seeding
             await SeedData.InitializeAsync(app.Services);
 
@@ -126,6 +140,10 @@ namespace Attendance_System
             });
 
             app.UseHttpsRedirection();
+
+            // CORS must run before authentication/authorization.
+            app.UseCors("frontend");
+
             app.UseAuthentication();
             app.UseAuthorization();
 

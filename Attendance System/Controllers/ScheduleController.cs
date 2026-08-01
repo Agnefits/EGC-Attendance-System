@@ -21,84 +21,9 @@ namespace Attendance_System.Controllers
             _context = context;
         }
 
-        [HttpGet("colleges")]
-        public async Task<IActionResult> GetColleges()
-        {
-            var colleges = await _context.Colleges
-                .Select(c => new { c.Id, c.Name, c.NameEn, c.Code, c.CreatedAt })
-                .ToListAsync();
-            return Ok(new { success = true, data = colleges });
-        }
-
-        [HttpPost("colleges")]
-        [AuthorizedRoles(UserRole.Admin)]
-        public async Task<IActionResult> CreateCollege([FromBody] CreateCollegeDto dto)
-        {
-            var exists = await _context.Colleges.AnyAsync(c => c.Code == dto.Code);
-            if (exists) return BadRequest(new { success = false, message = "Code already exists" });
-
-            var college = new College
-            {
-                Id = Guid.NewGuid().ToString(),
-                Name = dto.Name,
-                NameEn = dto.NameEn,
-                Code = dto.Code,
-                CreatedAt = DateTime.Now,
-                UpdatedAt = DateTime.Now
-            };
-            _context.Colleges.Add(college);
-            await _context.SaveChangesAsync();
-
-            return Ok(new { success = true, message = "College added successfully", data = college });
-        }
-
-        [HttpGet("departments")]
-        public async Task<IActionResult> GetDepartments([FromQuery] string? collegeId)
-        {
-            var query = _context.Departments.Include(d => d.College).AsQueryable();
-            if (!string.IsNullOrEmpty(collegeId)) query = query.Where(d => d.CollegeId == collegeId);
-
-            var departments = await query.Select(d => new
-            {
-                d.Id,
-                d.Name,
-                d.NameEn,
-                d.Code,
-                d.DeptType,
-                CollegeName = d.College != null ? d.College.Name : null,
-                d.ParentId,
-                d.CreatedAt
-            }).ToListAsync();
-
-            return Ok(new { success = true, data = departments });
-        }
-
-        [HttpPost("departments")]
-        [AuthorizedRoles(UserRole.Admin, UserRole.Hr)]
-        public async Task<IActionResult> CreateDepartment([FromBody] CreateDepartmentDto dto)
-        {
-            var exists = await _context.Departments.AnyAsync(d => d.Code == dto.Code);
-            if (exists) return BadRequest(new { success = false, message = "Code already exists" });
-
-            var department = new Department
-            {
-                Id = Guid.NewGuid().ToString(),
-                Name = dto.Name,
-                NameEn = dto.NameEn,
-                Code = dto.Code,
-                DeptType = dto.DeptType,
-                CollegeId = dto.CollegeId,
-                ParentId = dto.ParentId,
-                ParentType = dto.ParentType,
-                FunctionDescription = dto.FunctionDescription,
-                CreatedAt = DateTime.Now,
-                UpdatedAt = DateTime.Now
-            };
-            _context.Departments.Add(department);
-            await _context.SaveChangesAsync();
-
-            return Ok(new { success = true, message = "Department added successfully", data = department });
-        }
+        // NOTE: Colleges and Departments endpoints were moved out of this controller
+        // into CollegesController and DepartmentsController. This controller now
+        // only handles work schedules and their assignments.
 
         [HttpGet("work")]
         public async Task<IActionResult> GetWorkSchedules()
@@ -131,8 +56,8 @@ namespace Attendance_System.Controllers
                 HoursPerDay = dto.HoursPerDay,
                 DaysPerWeek = dto.DaysPerWeek,
                 TargetScope = dto.TargetScope,
-                CreatedAt = DateTime.Now,
-                UpdatedAt = DateTime.Now
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
             };
 
             _context.WorkSchedules.Add(schedule);
@@ -196,18 +121,6 @@ namespace Attendance_System.Controllers
         }
     }
 
-    public class CreateCollegeDto { public string Name { get; set; } = string.Empty; public string NameEn { get; set; } = string.Empty; public string Code { get; set; } = string.Empty; }
-    public class CreateDepartmentDto
-    {
-        public string Name { get; set; } = string.Empty;
-        public string NameEn { get; set; } = string.Empty;
-        public string Code { get; set; } = string.Empty;
-        public DepartmentType DeptType { get; set; }
-        public string? CollegeId { get; set; }
-        public string? ParentId { get; set; }
-        public string? ParentType { get; set; }
-        public string? FunctionDescription { get; set; }
-    }
     public class CreateWorkScheduleDto
     {
         public string Title { get; set; } = string.Empty;
@@ -218,6 +131,7 @@ namespace Attendance_System.Controllers
         public int DaysPerWeek { get; set; } = 5;
         public TargetScope TargetScope { get; set; }
     }
+
     public class AssignScheduleDto
     {
         public long ScheduleId { get; set; }

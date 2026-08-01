@@ -36,141 +36,120 @@ namespace Attendance_System.Controllers
         [AllowAnonymous]
         public async Task<IActionResult> Login([FromBody] LoginDto dto)
         {
-            try
+            var user = await _context.Users
+                .Include(u => u.Employee)
+                .ThenInclude(e => e!.Department)
+                .Include(u => u.Employee)
+                .ThenInclude(e => e!.College)
+                .FirstOrDefaultAsync(u => u.Email == dto.Email);
+
+            if (user == null)
+                return Unauthorized(new { success = false, message = "Invalid email" });
+
+            if (!BCrypt.Net.BCrypt.Verify(dto.Password, user.PasswordHash))
+                return Unauthorized(new { success = false, message = "Invalid password" });
+
+            if (!user.IsActive || user.DeletedAt != null)
+                return Unauthorized(new { success = false, message = "Account is inactive, please contact administration" });
+
+            user.LastLoginAt = DateTime.Now;
+            user.UpdatedAt = DateTime.Now;
+            await _context.SaveChangesAsync();
+
+            var token = _jwtService.GenerateToken(user);
+
+            return Ok(new
             {
-                var user = await _context.Users
-                    .Include(u => u.Employee)
-                    .ThenInclude(e => e.Department)
-                    .Include(u => u.Employee)
-                    .ThenInclude(e => e.College)
-                    .FirstOrDefaultAsync(u => u.Email == dto.Email);
-
-                if (user == null)
-                    return Unauthorized(new { success = false, message = "Invalid email" });
-
-                if (!BCrypt.Net.BCrypt.Verify(dto.Password, user.PasswordHash))
-                    return Unauthorized(new { success = false, message = "Invalid password" });
-
-                if (!user.IsActive || user.DeletedAt != null)
-                    return Unauthorized(new { success = false, message = "Account is inactive, please contact administration" });
-
-                user.LastLoginAt = DateTime.Now;
-                user.UpdatedAt = DateTime.Now;
-                await _context.SaveChangesAsync();
-
-                var token = _jwtService.GenerateToken(user);
-
-                return Ok(new
+                success = true,
+                message = "Login successful",
+                data = new
                 {
-                    success = true,
-                    message = "Login successful",
-                    data = new
-                    {
-                        Token = token,
-                        UserId = user.Id,
-                        Email = user.Email,
-                        Role = user.Role.ToString(),
-                        EmployeeId = user.Employee?.Id,
-                        EmployeeName = user.Employee?.Name,
-                        Department = user.Employee?.Department?.Name,
-                        College = user.Employee?.College?.Name
-                    }
-                });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { success = false, message = "An error occurred during login", error = ex.Message });
-            }
+                    Token = token,
+                    UserId = user.Id,
+                    Email = user.Email,
+                    Role = user.Role.ToString(),
+                    EmployeeId = user.Employee?.Id,
+                    EmployeeName = user.Employee?.Name,
+                    Department = user.Employee?.Department?.Name,
+                    College = user.Employee?.College?.Name
+                }
+            });
         }
 
         [HttpPost("register")]
         [AuthorizedRoles(UserRole.Admin)]
         public async Task<IActionResult> Register([FromBody] RegisterDto dto)
         {
-            try
+            var userEmailExists = await _context.Users.AnyAsync(u => u.Email == dto.Email);
+            if (userEmailExists)
+                return BadRequest(new { success = false, message = "Email is already registered" });
+
+            var employeeEmailExists = await _context.Employees.AnyAsync(e => e.Email == dto.Email);
+            if (employeeEmailExists)
+                return BadRequest(new { success = false, message = "Employee email already exists" });
+
+            var employee = new Employee
             {
-                var userEmailExists = await _context.Users.AnyAsync(u => u.Email == dto.Email);
-                if (userEmailExists)
-                    return BadRequest(new { success = false, message = "Email is already registered" });
+                Id = Guid.NewGuid().ToString(),
+                Name = dto.Name,
+                NameEn = dto.NameEn,
+                Email = dto.Email,
+                Phone = dto.Phone,
+                Gender = dto.Gender,
+                RoleClassification = dto.RoleClassification ?? EmployeeRoleClassification.Academic,
+                Type = dto.Type ?? EmployeeType.Academic,
+                AcademicRank = dto.AcademicRank,
+                DepartmentId = dto.DepartmentId,
+                CollegeId = dto.CollegeId,
+                HeadType = dto.HeadType,
+                Status = "active",
+                CreatedAt = DateTime.Now,
+                UpdatedAt = DateTime.Now
+            };
 
-                var employeeEmailExists = await _context.Employees.AnyAsync(e => e.Email == dto.Email);
-                if (employeeEmailExists)
-                    return BadRequest(new { success = false, message = "Employee email already exists" });
+            _context.Employees.Add(employee);
+            await _context.SaveChangesAsync();
 
-                var employee = new Employee
-                {
-                    Id = Guid.NewGuid().ToString(),
-                    Name = dto.Name,
-                    NameEn = dto.NameEn,
-                    Email = dto.Email,
-                    Phone = dto.Phone,
-                    Gender = dto.Gender,
-                    RoleClassification = dto.RoleClassification ?? EmployeeRoleClassification.Academic,
-                    Type = dto.Type ?? EmployeeType.Academic,
-                    AcademicRank = dto.AcademicRank,
-                    DepartmentId = dto.DepartmentId,
-                    CollegeId = dto.CollegeId,
-                    HeadType = dto.HeadType,
-                    Status = "active",
-                    CreatedAt = DateTime.Now,
-                    UpdatedAt = DateTime.Now
-                };
-
-                _context.Employees.Add(employee);
-                await _context.SaveChangesAsync();
-
-                var user = new User
-                {
-                    EmployeeId = employee.Id,
-                    Email = dto.Email,
-                    PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password),
-                    Role = dto.Role ?? UserRole.Employee,
-                    IsActive = true,
-                    CreatedAt = DateTime.Now,
-                    UpdatedAt = DateTime.Now
-                };
-
-                _context.Users.Add(user);
-                await _context.SaveChangesAsync();
-
-                _ = Task.Run(() => _emailService.SendEmailAsync(user.Email, "Welcome", $"<p>Welcome, {employee.Name}!</p>"));
-
-                return Ok(new
-                {
-                    success = true,
-                    message = "Registration successful",
-                    data = new { UserId = user.Id, EmployeeId = employee.Id }
-                });
-            }
-            catch (Exception ex)
+            var user = new User
             {
-                return StatusCode(500, new { success = false, message = "An error occurred during registration", error = ex.Message });
-            }
+                EmployeeId = employee.Id,
+                Email = dto.Email,
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password),
+                Role = dto.Role ?? UserRole.Employee,
+                IsActive = true,
+                CreatedAt = DateTime.Now,
+                UpdatedAt = DateTime.Now
+            };
+
+            _context.Users.Add(user);
+            await _context.SaveChangesAsync();
+
+            _ = Task.Run(() => _emailService.SendEmailAsync(user.Email, "Welcome", $"<p>Welcome, {employee.Name}!</p>"));
+
+            return Ok(new
+            {
+                success = true,
+                message = "Registration successful",
+                data = new { UserId = user.Id, EmployeeId = employee.Id }
+            });
         }
 
         [HttpPost("change-password")]
         public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordDto dto)
         {
-            try
-            {
-                var user = await _context.Users.FindAsync(dto.UserId);
-                if (user == null)
-                    return NotFound(new { success = false, message = "User not found" });
+            var user = await _context.Users.FindAsync(dto.UserId);
+            if (user == null)
+                return NotFound(new { success = false, message = "User not found" });
 
-                if (!BCrypt.Net.BCrypt.Verify(dto.OldPassword, user.PasswordHash))
-                    return BadRequest(new { success = false, message = "Incorrect old password" });
+            if (!BCrypt.Net.BCrypt.Verify(dto.OldPassword, user.PasswordHash))
+                return BadRequest(new { success = false, message = "Incorrect old password" });
 
-                user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.NewPassword);
-                user.UpdatedAt = DateTime.Now;
+            user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.NewPassword);
+            user.UpdatedAt = DateTime.Now;
 
-                await _context.SaveChangesAsync();
+            await _context.SaveChangesAsync();
 
-                return Ok(new { success = true, message = "Password changed successfully" });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { success = false, message = "An error occurred", error = ex.Message });
-            }
+            return Ok(new { success = true, message = "Password changed successfully" });
         }
 
         [HttpPost("logout")]
@@ -182,52 +161,45 @@ namespace Attendance_System.Controllers
         [HttpGet("me")]
         public async Task<IActionResult> GetCurrentUser()
         {
-            try
+            var userId = GetCurrentUserId();
+            if (userId == null)
+                return Unauthorized();
+
+            var user = await _context.Users
+                .Include(u => u.Employee)
+                .ThenInclude(e => e!.Department)
+                .Include(u => u.Employee)
+                .ThenInclude(e => e!.College)
+                .FirstOrDefaultAsync(u => u.Id == userId);
+
+            if (user == null)
+                return NotFound();
+
+            return Ok(new
             {
-                var userId = GetCurrentUserId();
-                if (userId == null)
-                    return Unauthorized();
-
-                var user = await _context.Users
-                    .Include(u => u.Employee)
-                    .ThenInclude(e => e.Department)
-                    .Include(u => u.Employee)
-                    .ThenInclude(e => e.College)
-                    .FirstOrDefaultAsync(u => u.Id == userId);
-
-                if (user == null)
-                    return NotFound();
-
-                return Ok(new
+                success = true,
+                data = new
                 {
-                    success = true,
-                    data = new
+                    user.Id,
+                    user.Email,
+                    user.Role,
+                    user.IsActive,
+                    user.CreatedAt,
+                    user.LastLoginAt,
+                    Employee = user.Employee != null ? new
                     {
-                        user.Id,
-                        user.Email,
-                        user.Role,
-                        user.IsActive,
-                        user.CreatedAt,
-                        user.LastLoginAt,
-                        Employee = user.Employee != null ? new
-                        {
-                            user.Employee.Id,
-                            user.Employee.Name,
-                            user.Employee.NameEn,
-                            user.Employee.Phone,
-                            user.Employee.Gender,
-                            Department = user.Employee.Department?.Name,
-                            College = user.Employee.College?.Name,
-                            user.Employee.Type,
-                            user.Employee.RoleClassification
-                        } : null
-                    }
-                });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { success = false, message = "An error occurred", error = ex.Message });
-            }
+                        user.Employee.Id,
+                        user.Employee.Name,
+                        user.Employee.NameEn,
+                        user.Employee.Phone,
+                        user.Employee.Gender,
+                        Department = user.Employee.Department?.Name,
+                        College = user.Employee.College?.Name,
+                        user.Employee.Type,
+                        user.Employee.RoleClassification
+                    } : null
+                }
+            });
         }
 
         [HttpGet("validate-token")]

@@ -21,6 +21,7 @@ namespace Attendance_System.Data
         public DbSet<WorkSchedule> WorkSchedules => Set<WorkSchedule>();
         public DbSet<ScheduleAssignment> ScheduleAssignments => Set<ScheduleAssignment>();
         public DbSet<ExamSchedule> ExamSchedules => Set<ExamSchedule>();
+        public DbSet<SystemSetting> SystemSettings => Set<SystemSetting>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -217,6 +218,15 @@ namespace Attendance_System.Data
                       .WithMany(e => e.ExamSchedules)
                       .HasForeignKey(ex => ex.EmployeeId)
                       .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            // SystemSetting Configuration (key/value store for SettingsController)
+            modelBuilder.Entity<SystemSetting>(entity =>
+            {
+                entity.HasKey(s => s.Key);
+                entity.Property(s => s.Key).HasMaxLength(60);
+                entity.Property(s => s.Value).HasMaxLength(255).IsRequired();
+                entity.Property(s => s.Description).HasMaxLength(255);
             });
         }
     }

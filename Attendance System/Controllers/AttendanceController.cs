@@ -1,7 +1,9 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System;
+using System.Globalization;
 using System.Linq;
+using System.Security.Claims;
 using System.Threading.Tasks;
 using Attendance_System.Models;
 using Attendance_System.Enums;
@@ -16,11 +18,18 @@ namespace Attendance_System.Controllers
     {
         private readonly AppDbContext _context;
 
+        // Fallback geofence (overridden by SystemSettings: campus.lat / campus.lng / campus.radius)
+        private const double DefaultCampusLat = 27.184187;
+        private const double DefaultCampusLng = 31.172920;
+        private const double DefaultCampusRadius = 500; // meters
+        private const double MaxAccuracyMargin = 200;   // meters — matches the front-end
+
         public AttendanceController(AppDbContext context)
         {
             _context = context;
         }
 
+        // GET /api/attendance  — management view (all / dept-scoped)
         [HttpGet]
         [AuthorizedRoles(UserRole.Admin, UserRole.Hr, UserRole.Head)]
         public async Task<IActionResult> GetAll(
@@ -32,202 +41,237 @@ namespace Attendance_System.Controllers
             [FromQuery] int page = 1,
             [FromQuery] int pageSize = 20)
         {
-            try
-            {
-                var query = _context.AttendanceLogs
-                    .Include(a => a.Employee)
-                    .ThenInclude(e => e!.Department)
-                    .Include(a => a.Employee)
-                    .ThenInclude(e => e!.College)
-                    .AsQueryable();
+            var query = _context.AttendanceLogs
+                .Include(a => a.Employee).ThenInclude(e => e!.Department)
+                .Include(a => a.Employee).ThenInclude(e => e!.College)
+                .AsQueryable();
 
-                if (from.HasValue) query = query.Where(a => a.Date >= from.Value);
-                if (to.HasValue) query = query.Where(a => a.Date <= to.Value);
-                if (!string.IsNullOrEmpty(employeeId)) query = query.Where(a => a.EmployeeId == employeeId);
-                if (!string.IsNullOrEmpty(departmentId)) query = query.Where(a => a.Employee!.DepartmentId == departmentId);
-                if (status.HasValue) query = query.Where(a => a.Status == status.Value);
+            if (from.HasValue) query = query.Where(a => a.Date >= from.Value);
+            if (to.HasValue) query = query.Where(a => a.Date <= to.Value);
+            if (!string.IsNullOrEmpty(employeeId)) query = query.Where(a => a.EmployeeId == employeeId);
+            if (!string.IsNullOrEmpty(departmentId)) query = query.Where(a => a.Employee!.DepartmentId == departmentId);
+            if (status.HasValue) query = query.Where(a => a.Status == status.Value);
 
-                var total = await query.CountAsync();
+            var total = await query.CountAsync();
 
-                var attendances = await query
-                    .OrderByDescending(a => a.Date)
-                    .Skip((page - 1) * pageSize)
-                    .Take(pageSize)
-                    .Select(a => new
-                    {
-                        a.Id,
-                        a.EmployeeId,
-                        EmployeeName = a.Employee!.Name,
-                        Department = a.Employee.Department != null ? a.Employee.Department.Name : null,
-                        College = a.Employee.College != null ? a.Employee.College.Name : null,
-                        a.Date,
-                        a.CheckIn,
-                        a.CheckOut,
-                        a.Status,
-                        a.Latitude,
-                        a.Longitude,
-                        a.DistanceFromCampus,
-                        a.ResolutionMethod
-                    })
-                    .ToListAsync();
-
-                return Ok(new
+            var attendances = await query
+                .OrderByDescending(a => a.Date)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .Select(a => new
                 {
-                    success = true,
-                    data = attendances,
-                    pagination = new
-                    {
-                        page,
-                        pageSize,
-                        total,
-                        totalPages = (int)Math.Ceiling((double)total / pageSize)
-                    }
-                });
-            }
-            catch (Exception ex)
+                    a.Id,
+                    a.EmployeeId,
+                    EmployeeName = a.Employee!.Name,
+                    Department = a.Employee.Department != null ? a.Employee.Department.Name : null,
+                    College = a.Employee.College != null ? a.Employee.College.Name : null,
+                    a.Date,
+                    a.CheckIn,
+                    a.CheckOut,
+                    a.Status,
+                    a.Latitude,
+                    a.Longitude,
+                    a.DistanceFromCampus,
+                    a.ResolutionMethod
+                })
+                .ToListAsync();
+
+            return Ok(new
             {
-                return StatusCode(500, new { success = false, message = "An error occurred", error = ex.Message });
-            }
+                success = true,
+                data = attendances,
+                pagination = new { page, pageSize, total, totalPages = (int)Math.Ceiling((double)total / pageSize) }
+            });
         }
 
+        // GET /api/attendance/my  — the caller's own logs
+        [HttpGet("my")]
+        [AuthorizedRoles]
+        public async Task<IActionResult> GetMy()
+        {
+            var employeeId = GetCurrentEmployeeId();
+            if (string.IsNullOrEmpty(employeeId)) return Unauthorized(new { success = false, message = "No employee linked to this account" });
+
+            var attendances = await _context.AttendanceLogs
+                .Where(a => a.EmployeeId == employeeId)
+                .OrderByDescending(a => a.Date)
+                .ToListAsync();
+
+            return Ok(new { success = true, data = attendances });
+        }
+
+        // GET /api/attendance/employee/{employeeId}  — management view of one employee
         [HttpGet("employee/{employeeId}")]
+        [AuthorizedRoles(UserRole.Admin, UserRole.Hr, UserRole.Head)]
         public async Task<IActionResult> GetByEmployee(string employeeId)
         {
-            try
-            {
-                var attendances = await _context.AttendanceLogs
-                    .Where(a => a.EmployeeId == employeeId)
-                    .OrderByDescending(a => a.Date)
-                    .ToListAsync();
+            var attendances = await _context.AttendanceLogs
+                .Where(a => a.EmployeeId == employeeId)
+                .OrderByDescending(a => a.Date)
+                .ToListAsync();
 
-                return Ok(new { success = true, data = attendances });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { success = false, message = "An error occurred", error = ex.Message });
-            }
+            return Ok(new { success = true, data = attendances });
         }
 
+        // GET /api/attendance/today  — management summary for today
         [HttpGet("today")]
+        [AuthorizedRoles(UserRole.Admin, UserRole.Hr, UserRole.Head)]
         public async Task<IActionResult> GetTodayAttendance()
         {
-            try
+            var today = DateOnly.FromDateTime(DateTime.Today);
+            var totalEmployees = await _context.Employees.CountAsync(e => e.Status == "active" && e.DeletedAt == null);
+
+            var attendances = await _context.AttendanceLogs
+                .Include(a => a.Employee).ThenInclude(e => e!.Department)
+                .Where(a => a.Date == today)
+                .ToListAsync();
+
+            return Ok(new
             {
-                var today = DateOnly.FromDateTime(DateTime.Today);
-                var totalEmployees = await _context.Employees.CountAsync(e => e.Status == "active");
-
-                var attendances = await _context.AttendanceLogs
-                    .Include(a => a.Employee)
-                    .ThenInclude(e => e!.Department)
-                    .Where(a => a.Date == today)
-                    .ToListAsync();
-
-                return Ok(new
+                success = true,
+                data = new
                 {
-                    success = true,
-                    data = new
-                    {
-                        Date = today,
-                        TotalEmployees = totalEmployees,
-                        CheckedIn = attendances.Count(a => a.CheckIn != null),
-                        CheckedOut = attendances.Count(a => a.CheckOut != null),
-                        Details = attendances
-                    }
-                });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { success = false, message = "An error occurred", error = ex.Message });
-            }
+                    Date = today,
+                    TotalEmployees = totalEmployees,
+                    CheckedIn = attendances.Count(a => a.CheckIn != null),
+                    CheckedOut = attendances.Count(a => a.CheckOut != null),
+                    Details = attendances
+                }
+            });
         }
 
+        // POST /api/attendance/checkin  — the caller checks THEMSELVES in (employeeId comes from the token)
         [HttpPost("checkin")]
+        [AuthorizedRoles]
         public async Task<IActionResult> CheckIn([FromBody] CheckInDto dto)
         {
-            try
-            {
-                var employee = await _context.Employees.FirstOrDefaultAsync(e => e.Id == dto.EmployeeId);
-                if (employee == null || employee.Status != "active")
-                    return BadRequest(new { success = false, message = "Employee not found or inactive" });
+            var employeeId = GetCurrentEmployeeId();
+            if (string.IsNullOrEmpty(employeeId))
+                return Unauthorized(new { success = false, message = "No employee linked to this account" });
 
-                var today = DateOnly.FromDateTime(DateTime.Today);
-                var existing = await _context.AttendanceLogs.FirstOrDefaultAsync(a => a.EmployeeId == dto.EmployeeId && a.Date == today);
-                if (existing != null)
-                    return BadRequest(new { success = false, message = "Already checked in today" });
+            var employee = await _context.Employees.FirstOrDefaultAsync(e => e.Id == employeeId);
+            if (employee == null || employee.Status != "active" || employee.DeletedAt != null)
+                return BadRequest(new { success = false, message = "Employee not found or inactive" });
 
-                var now = TimeOnly.FromDateTime(DateTime.Now);
-                var schedule = await GetWorkSchedule(dto.EmployeeId);
+            // Location is mandatory for the geofence check.
+            if (dto.Latitude == null || dto.Longitude == null)
+                return BadRequest(new { success = false, message = "Location (latitude/longitude) is required" });
 
-                var status = AttendanceStatus.Present;
-                if (schedule?.CheckInTime != null && now > schedule.CheckInTime.Value.AddMinutes(15))
+            var (campusLat, campusLng, radius) = await GetCampusGeofenceAsync();
+            var distance = Haversine((double)dto.Latitude.Value, (double)dto.Longitude.Value, campusLat, campusLng);
+
+            // Add a margin for GPS accuracy so users at the edge aren't wrongly rejected.
+            var margin = Math.Min((double)(dto.GpsAccuracy ?? 0), MaxAccuracyMargin);
+            var allowedRadius = radius + margin;
+
+            if (distance > allowedRadius)
+                return StatusCode(422, new
                 {
-                    status = AttendanceStatus.Late;
-                }
-
-                var attendance = new AttendanceLog
-                {
-                    Id = Guid.NewGuid().ToString(),
-                    EmployeeId = dto.EmployeeId,
-                    Date = today,
-                    CheckIn = now,
-                    Status = status,
-                    Latitude = dto.Latitude,
-                    Longitude = dto.Longitude,
-                    GpsAccuracy = dto.GpsAccuracy,
-                    ResolutionMethod = dto.ResolutionMethod,
-                    CreatedAt = DateTime.UtcNow,
-                    UpdatedAt = DateTime.UtcNow
-                };
-
-                _context.AttendanceLogs.Add(attendance);
-                await _context.SaveChangesAsync();
-
-                return Ok(new
-                {
-                    success = true,
-                    message = "Check-in successful",
-                    data = new
-                    {
-                        attendance.Id,
-                        attendance.CheckIn,
-                        attendance.Status
-                    }
+                    success = false,
+                    message = "Outside campus range",
+                    distance = Math.Round(distance),
+                    allowed = radius
                 });
-            }
-            catch (Exception ex)
+
+            var today = DateOnly.FromDateTime(DateTime.Today);
+            var existing = await _context.AttendanceLogs.FirstOrDefaultAsync(a => a.EmployeeId == employeeId && a.Date == today);
+            if (existing != null)
+                return BadRequest(new { success = false, message = "Already checked in today" });
+
+            var now = TimeOnly.FromDateTime(DateTime.Now);
+            var schedule = await GetWorkSchedule(employeeId);
+
+            var status = AttendanceStatus.Present;
+            if (schedule?.CheckInTime != null && now > schedule.CheckInTime.Value.AddMinutes(15))
+                status = AttendanceStatus.Late;
+
+            var attendance = new AttendanceLog
             {
-                return StatusCode(500, new { success = false, message = "An error occurred", error = ex.Message });
-            }
+                Id = Guid.NewGuid().ToString(),
+                EmployeeId = employeeId,
+                Date = today,
+                CheckIn = now,
+                Status = status,
+                Latitude = dto.Latitude,
+                Longitude = dto.Longitude,
+                GpsAccuracy = dto.GpsAccuracy,
+                DistanceFromCampus = (decimal)Math.Round(distance, 2),
+                ResolutionMethod = dto.ResolutionMethod,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            };
+
+            _context.AttendanceLogs.Add(attendance);
+            await _context.SaveChangesAsync();
+
+            return Ok(new
+            {
+                success = true,
+                message = "Check-in successful",
+                data = new { attendance.Id, attendance.CheckIn, attendance.Status, attendance.DistanceFromCampus }
+            });
         }
 
+        // PUT /api/attendance/checkout/{id}  — caller can only close their own record (Admin/Hr may close any)
         [HttpPut("checkout/{id}")]
+        [AuthorizedRoles]
         public async Task<IActionResult> CheckOut(string id)
         {
-            try
-            {
-                var attendance = await _context.AttendanceLogs.Include(a => a.Employee).FirstOrDefaultAsync(a => a.Id == id);
-                if (attendance == null || attendance.CheckOut != null)
-                    return BadRequest(new { success = false, message = "Record not found or already checked out" });
+            var employeeId = GetCurrentEmployeeId();
+            var role = User.FindFirst(ClaimTypes.Role)?.Value;
 
-                attendance.CheckOut = TimeOnly.FromDateTime(DateTime.Now);
-                attendance.UpdatedAt = DateTime.UtcNow;
+            var attendance = await _context.AttendanceLogs.FirstOrDefaultAsync(a => a.Id == id);
+            if (attendance == null || attendance.CheckOut != null)
+                return BadRequest(new { success = false, message = "Record not found or already checked out" });
 
-                await _context.SaveChangesAsync();
-                return Ok(new
-                {
-                    success = true,
-                    message = "Check-out successful",
-                    data = new
-                    {
-                        attendance.Id,
-                        attendance.CheckOut
-                    }
-                });
-            }
-            catch (Exception ex)
+            var isManager = role == "Admin" || role == "Hr";
+            if (!isManager && attendance.EmployeeId != employeeId)
+                return StatusCode(403, new { success = false, message = "You can only check out your own attendance record" });
+
+            attendance.CheckOut = TimeOnly.FromDateTime(DateTime.Now);
+            attendance.Status = AttendanceStatus.Left;
+            attendance.UpdatedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new
             {
-                return StatusCode(500, new { success = false, message = "An error occurred", error = ex.Message });
-            }
+                success = true,
+                message = "Check-out successful",
+                data = new { attendance.Id, attendance.CheckOut, attendance.Status }
+            });
+        }
+
+        // ?? helpers ??
+
+        private string? GetCurrentEmployeeId() => User.FindFirst("EmployeeId")?.Value;
+
+        private async Task<(double lat, double lng, double radius)> GetCampusGeofenceAsync()
+        {
+            var settings = await _context.SystemSettings
+                .Where(s => s.Key == "campus.lat" || s.Key == "campus.lng" || s.Key == "campus.radius")
+                .ToDictionaryAsync(s => s.Key, s => s.Value);
+
+            double lat = Parse(settings, "campus.lat", DefaultCampusLat);
+            double lng = Parse(settings, "campus.lng", DefaultCampusLng);
+            double radius = Parse(settings, "campus.radius", DefaultCampusRadius);
+            return (lat, lng, radius);
+        }
+
+        private static double Parse(System.Collections.Generic.Dictionary<string, string> map, string key, double fallback)
+            => map.TryGetValue(key, out var v) && double.TryParse(v, NumberStyles.Any, CultureInfo.InvariantCulture, out var d) ? d : fallback;
+
+        // Haversine distance in meters.
+        private static double Haversine(double lat1, double lon1, double lat2, double lon2)
+        {
+            const double R = 6371000; // Earth radius in meters
+            double dLat = (lat2 - lat1) * Math.PI / 180;
+            double dLon = (lon2 - lon1) * Math.PI / 180;
+            double a = Math.Sin(dLat / 2) * Math.Sin(dLat / 2) +
+                       Math.Cos(lat1 * Math.PI / 180) * Math.Cos(lat2 * Math.PI / 180) *
+                       Math.Sin(dLon / 2) * Math.Sin(dLon / 2);
+            double c = 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1 - a));
+            return R * c;
         }
 
         private async Task<WorkSchedule?> GetWorkSchedule(string employeeId)
@@ -251,7 +295,7 @@ namespace Attendance_System.Controllers
 
     public class CheckInDto
     {
-        public string EmployeeId { get; set; } = string.Empty;
+        // EmployeeId intentionally removed — taken from the authenticated token.
         public decimal? Latitude { get; set; }
         public decimal? Longitude { get; set; }
         public decimal? GpsAccuracy { get; set; }
