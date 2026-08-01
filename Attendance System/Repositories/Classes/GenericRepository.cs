@@ -54,5 +54,12 @@ namespace Attendance_System.Repositories.Classes
         {
             return await _dbSet.Where(predicate).ToListAsync();
         }
+
+        // Added: exposes IQueryable so controllers can Include/Where/OrderBy/Skip/Take
+        // through the repository instead of injecting AppDbContext directly.
+        public virtual IQueryable<T> Query()
+        {
+            return _dbSet.AsQueryable();
+        }
     }
 }

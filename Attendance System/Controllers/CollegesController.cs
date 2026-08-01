@@ -1,12 +1,13 @@
-﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Attendance_System.Models;
 using Attendance_System.Enums;
 using Attendance_System.Middleware;
-using Attendance_System.Data;
+using Attendance_System.UnitOfWork;
 
 namespace Attendance_System.Controllers
 {
@@ -14,50 +15,49 @@ namespace Attendance_System.Controllers
     [ApiController]
     public class CollegesController : ControllerBase
     {
-        private readonly AppDbContext _context;
-        public CollegesController(AppDbContext context) { _context = context; }
+        private readonly IUnitOfWork _unitOfWork;
+        public CollegesController(IUnitOfWork unitOfWork) { _unitOfWork = unitOfWork; }
 
-        // GET /api/colleges  — any authenticated user (needed for dropdowns)
         [HttpGet]
         [AuthorizedRoles]
         public async Task<IActionResult> GetAll()
         {
-            var colleges = await _context.Colleges
+            var colleges = await _unitOfWork.Colleges.Query()
                 .Where(c => c.DeletedAt == null)
                 .OrderBy(c => c.Name)
-                .Select(c => new
+                .Select(c => new CollegeListItemDto
                 {
-                    c.Id,
-                    c.Name,
-                    c.NameEn,
-                    c.Code,
+                    Id = c.Id,
+                    Name = c.Name,
+                    NameEn = c.NameEn,
+                    Code = c.Code,
                     DepartmentsCount = c.Departments.Count(d => d.DeletedAt == null),
                     EmployeesCount = c.Employees.Count(e => e.DeletedAt == null),
-                    c.CreatedAt
+                    CreatedAt = c.CreatedAt
                 })
                 .ToListAsync();
 
             return Ok(new { success = true, data = colleges });
         }
 
-        // GET /api/colleges/{id}
         [HttpGet("{id}")]
         [AuthorizedRoles]
         public async Task<IActionResult> GetById(string id)
         {
-            var college = await _context.Colleges
+            var college = await _unitOfWork.Colleges.Query()
                 .Where(c => c.Id == id && c.DeletedAt == null)
-                .Select(c => new
+                .Select(c => new CollegeDetailDto
                 {
-                    c.Id,
-                    c.Name,
-                    c.NameEn,
-                    c.Code,
+                    Id = c.Id,
+                    Name = c.Name,
+                    NameEn = c.NameEn,
+                    Code = c.Code,
                     Departments = c.Departments
                         .Where(d => d.DeletedAt == null)
-                        .Select(d => new { d.Id, d.Name, d.NameEn, d.Code, d.DeptType }),
-                    c.CreatedAt,
-                    c.UpdatedAt
+                        .Select(d => new CollegeDepartmentDto { Id = d.Id, Name = d.Name, NameEn = d.NameEn, Code = d.Code, DeptType = d.DeptType })
+                        .ToList(),
+                    CreatedAt = c.CreatedAt,
+                    UpdatedAt = c.UpdatedAt
                 })
                 .FirstOrDefaultAsync();
 
@@ -65,12 +65,11 @@ namespace Attendance_System.Controllers
             return Ok(new { success = true, data = college });
         }
 
-        // POST /api/colleges
         [HttpPost]
         [AuthorizedRoles(UserRole.Admin)]
         public async Task<IActionResult> Create([FromBody] CreateCollegeDto dto)
         {
-            var codeExists = await _context.Colleges.AnyAsync(c => c.Code == dto.Code && c.DeletedAt == null);
+            var codeExists = await _unitOfWork.Colleges.Query().AnyAsync(c => c.Code == dto.Code && c.DeletedAt == null);
             if (codeExists) return BadRequest(new { success = false, message = "College code already exists" });
 
             var college = new College
@@ -83,23 +82,22 @@ namespace Attendance_System.Controllers
                 UpdatedAt = DateTime.UtcNow
             };
 
-            _context.Colleges.Add(college);
-            await _context.SaveChangesAsync();
+            await _unitOfWork.Colleges.AddAsync(college);
+            await _unitOfWork.CompleteAsync();
 
-            return Ok(new { success = true, message = "College created successfully", data = college });
+            return Ok(new { success = true, message = "College created successfully", data = new { college.Id, college.Name, college.NameEn, college.Code } });
         }
 
-        // PUT /api/colleges/{id}
         [HttpPut("{id}")]
         [AuthorizedRoles(UserRole.Admin)]
         public async Task<IActionResult> Update(string id, [FromBody] UpdateCollegeDto dto)
         {
-            var college = await _context.Colleges.FirstOrDefaultAsync(c => c.Id == id && c.DeletedAt == null);
+            var college = await _unitOfWork.Colleges.Query().FirstOrDefaultAsync(c => c.Id == id && c.DeletedAt == null);
             if (college == null) return NotFound(new { success = false, message = "College not found" });
 
             if (!string.IsNullOrEmpty(dto.Code) && dto.Code != college.Code)
             {
-                var codeExists = await _context.Colleges.AnyAsync(c => c.Code == dto.Code && c.Id != id && c.DeletedAt == null);
+                var codeExists = await _unitOfWork.Colleges.Query().AnyAsync(c => c.Code == dto.Code && c.Id != id && c.DeletedAt == null);
                 if (codeExists) return BadRequest(new { success = false, message = "College code already exists" });
                 college.Code = dto.Code;
             }
@@ -108,29 +106,66 @@ namespace Attendance_System.Controllers
             college.NameEn = dto.NameEn ?? college.NameEn;
             college.UpdatedAt = DateTime.UtcNow;
 
-            await _context.SaveChangesAsync();
-            return Ok(new { success = true, message = "College updated successfully", data = college });
+            _unitOfWork.Colleges.Update(college);
+            await _unitOfWork.CompleteAsync();
+
+            return Ok(new { success = true, message = "College updated successfully", data = new { college.Id, college.Name, college.NameEn, college.Code } });
         }
 
-        // DELETE /api/colleges/{id}  — soft delete
         [HttpDelete("{id}")]
         [AuthorizedRoles(UserRole.Admin)]
         public async Task<IActionResult> Delete(string id)
         {
-            var college = await _context.Colleges.FirstOrDefaultAsync(c => c.Id == id && c.DeletedAt == null);
+            var college = await _unitOfWork.Colleges.Query().FirstOrDefaultAsync(c => c.Id == id && c.DeletedAt == null);
             if (college == null) return NotFound(new { success = false, message = "College not found" });
 
-            var hasActiveDepts = await _context.Departments.AnyAsync(d => d.CollegeId == id && d.DeletedAt == null);
+            var hasActiveDepts = await _unitOfWork.Departments.Query().AnyAsync(d => d.CollegeId == id && d.DeletedAt == null);
             if (hasActiveDepts)
                 return BadRequest(new { success = false, message = "Cannot delete a college that still has active departments" });
 
             college.DeletedAt = DateTime.UtcNow;
             college.UpdatedAt = DateTime.UtcNow;
-            await _context.SaveChangesAsync();
+            _unitOfWork.Colleges.Update(college);
+            await _unitOfWork.CompleteAsync();
 
             return Ok(new { success = true, message = "College deleted successfully" });
         }
     }
+
+    // ── Response DTOs ──
+
+    public class CollegeListItemDto
+    {
+        public string Id { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+        public string NameEn { get; set; } = string.Empty;
+        public string Code { get; set; } = string.Empty;
+        public int DepartmentsCount { get; set; }
+        public int EmployeesCount { get; set; }
+        public DateTime CreatedAt { get; set; }
+    }
+
+    public class CollegeDetailDto
+    {
+        public string Id { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+        public string NameEn { get; set; } = string.Empty;
+        public string Code { get; set; } = string.Empty;
+        public List<CollegeDepartmentDto> Departments { get; set; } = new();
+        public DateTime CreatedAt { get; set; }
+        public DateTime UpdatedAt { get; set; }
+    }
+
+    public class CollegeDepartmentDto
+    {
+        public string Id { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+        public string NameEn { get; set; } = string.Empty;
+        public string Code { get; set; } = string.Empty;
+        public DepartmentType DeptType { get; set; }
+    }
+
+    // ── Request DTOs (unchanged) ──
 
     public class CreateCollegeDto
     {
