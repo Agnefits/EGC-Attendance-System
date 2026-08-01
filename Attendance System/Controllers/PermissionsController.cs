@@ -1,5 +1,4 @@
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 using Attendance_System.Models;
 using Attendance_System.Enums;
@@ -30,20 +29,29 @@ namespace Attendance_System.Controllers
             [FromQuery] int page = 1,
             [FromQuery] int pageSize = 20)
         {
-            var query = _unitOfWork.PermissionRequests.Query()
-                .Include(p => p.Employee).ThenInclude(e => e!.Department)
-                .Include(p => p.Approver)
-                .AsQueryable();
+            IEnumerable<PermissionRequest> requests;
 
-            if (status.HasValue) query = query.Where(p => p.Status == status.Value);
-            if (!string.IsNullOrEmpty(departmentId))
-                query = query.Where(p => p.Employee!.DepartmentId == departmentId);
-            if (!string.IsNullOrEmpty(employeeId))
-                query = query.Where(p => p.EmployeeId == employeeId);
+            if (departmentId != null)
+            {
+                requests = await _unitOfWork.PermissionRequests.GetPendingByDepartmentWithDetailsAsync(departmentId);
+            }
+            else if (employeeId != null)
+            {
+                requests = await _unitOfWork.PermissionRequests.GetByEmployeeIdWithDetailsAsync(employeeId);
+            }
+            else
+            {
+                var allRequests = await _unitOfWork.PermissionRequests.GetAllAsync();
+                requests = allRequests
+                    .Where(p => p.Employee != null && p.Employee.DeletedAt == null);
+            }
 
-            var total = await query.CountAsync();
+            if (status.HasValue)
+                requests = requests.Where(p => p.Status == status.Value);
 
-            var requests = await query
+            var total = requests.Count();
+
+            var result = requests
                 .OrderByDescending(p => p.CreatedAt)
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
@@ -51,23 +59,23 @@ namespace Attendance_System.Controllers
                 {
                     Id = p.Id,
                     EmployeeId = p.EmployeeId,
-                    EmployeeName = p.Employee!.Name,
-                    Department = p.Employee.Department != null ? p.Employee.Department.Name : null,
+                    EmployeeName = p.Employee?.Name ?? string.Empty,
+                    Department = p.Employee?.Department?.Name,
                     PermissionType = p.PermissionType,
                     Date = p.Date ?? DateOnly.FromDateTime(DateTime.Today),
                     DurationMinutes = p.DurationMinutes,
                     Reason = p.Reason,
                     Status = p.Status,
                     RejectionNote = p.RejectionNote,
-                    Approver = p.Approver != null ? p.Approver.Name : null,
+                    Approver = p.Approver?.Name,
                     CreatedAt = p.CreatedAt
                 })
-                .ToListAsync();
+                .ToList();
 
             return Ok(new
             {
                 success = true,
-                data = requests,
+                data = result,
                 pagination = new
                 {
                     page,
@@ -86,32 +94,28 @@ namespace Attendance_System.Controllers
             if (string.IsNullOrEmpty(employeeId))
                 return Unauthorized(new { success = false, message = "No employee linked to this account" });
 
-            var requests = await _unitOfWork.PermissionRequests.Query()
-                .Where(p => p.EmployeeId == employeeId)
-                .OrderByDescending(p => p.CreatedAt)
-                .Select(p => new MyPermissionRequestDto
-                {
-                    Id = p.Id,
-                    PermissionType = p.PermissionType,
-                    Date = p.Date ?? DateOnly.FromDateTime(DateTime.Today),
-                    DurationMinutes = p.DurationMinutes,
-                    Reason = p.Reason,
-                    Status = p.Status,
-                    RejectionNote = p.RejectionNote,
-                    CreatedAt = p.CreatedAt
-                })
-                .ToListAsync();
+            var requests = await _unitOfWork.PermissionRequests.GetByEmployeeIdWithDetailsAsync(employeeId);
 
-            var (mStart, mEnd) = MonthPeriod(DateOnly.FromDateTime(DateTime.Today));
-            var used = await _unitOfWork.PermissionRequests.Query()
-                .Where(p => p.EmployeeId == employeeId && p.PermissionType != PermissionType.Nursing
-                            && p.Status != LeaveStatus.Rejected && p.Date >= mStart && p.Date <= mEnd)
-                .SumAsync(p => (int?)p.DurationMinutes) ?? 0;
+            var result = requests.Select(p => new MyPermissionRequestDto
+            {
+                Id = p.Id,
+                PermissionType = p.PermissionType,
+                Date = p.Date ?? DateOnly.FromDateTime(DateTime.Today),
+                DurationMinutes = p.DurationMinutes,
+                Reason = p.Reason,
+                Status = p.Status,
+                RejectionNote = p.RejectionNote,
+                CreatedAt = p.CreatedAt
+            });
+
+            var today = DateOnly.FromDateTime(DateTime.Today);
+            var (mStart, mEnd) = MonthPeriod(today);
+            var used = await _unitOfWork.PermissionRequests.GetUsedMinutesByEmployeeAndDateRangeExcludingNursingAsync(employeeId, mStart, mEnd);
 
             return Ok(new
             {
                 success = true,
-                data = requests,
+                data = result,
                 budget = new PermissionBudgetDto
                 {
                     Monthly = MonthlyBudgetMinutes,
@@ -129,8 +133,7 @@ namespace Attendance_System.Controllers
             if (string.IsNullOrEmpty(employeeId))
                 return Unauthorized(new { success = false, message = "No employee linked to this account" });
 
-            var employee = await _unitOfWork.Employees.Query()
-                .FirstOrDefaultAsync(e => e.Id == employeeId && e.DeletedAt == null);
+            var employee = await _unitOfWork.Employees.GetEmployeeWithDepartmentAndCollegeAsync(employeeId);
             if (employee == null)
                 return BadRequest(new { success = false, message = "Employee not found" });
 
@@ -145,10 +148,7 @@ namespace Attendance_System.Controllers
             if (dto.PermissionType != PermissionType.Nursing)
             {
                 var (mStart, mEnd) = MonthPeriod(date);
-                var used = await _unitOfWork.PermissionRequests.Query()
-                    .Where(p => p.EmployeeId == employeeId && p.PermissionType != PermissionType.Nursing
-                                && p.Status != LeaveStatus.Rejected && p.Date >= mStart && p.Date <= mEnd)
-                    .SumAsync(p => (int?)p.DurationMinutes) ?? 0;
+                var used = await _unitOfWork.PermissionRequests.GetUsedMinutesByEmployeeAndDateRangeExcludingNursingAsync(employeeId, mStart, mEnd);
 
                 if (used + dto.DurationMinutes > MonthlyBudgetMinutes)
                     return BadRequest(new
@@ -186,9 +186,7 @@ namespace Attendance_System.Controllers
         [AuthorizedRoles(UserRole.Admin, UserRole.Hr, UserRole.Head)]
         public async Task<IActionResult> Approve(string id, [FromBody] ApprovePermissionDto dto)
         {
-            var request = await _unitOfWork.PermissionRequests.Query()
-                .Include(p => p.Employee)
-                .FirstOrDefaultAsync(p => p.Id == id);
+            var request = await _unitOfWork.PermissionRequests.GetPermissionRequestWithDetailsAsync(id);
 
             if (request == null)
                 return NotFound(new { success = false, message = "Request not found" });
@@ -202,11 +200,8 @@ namespace Attendance_System.Controllers
             var role = User.FindFirst(ClaimTypes.Role)?.Value;
             if (role == "Head")
             {
-                var headDeptId = await _unitOfWork.Employees.Query()
-                    .Where(e => e.Id == approverId)
-                    .Select(e => e.DepartmentId)
-                    .FirstOrDefaultAsync();
-                if (request.Employee!.DepartmentId != headDeptId)
+                var headDeptId = await _unitOfWork.Employees.GetDepartmentIdByEmployeeIdAsync(approverId);
+                if (request.Employee?.DepartmentId != headDeptId)
                     return StatusCode(403, new { success = false, message = "You can only review requests from your own department" });
             }
 

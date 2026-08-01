@@ -27,5 +27,33 @@ namespace Attendance_System.Repositories.Classes
         {
             return await _dbSet.AnyAsync(u => u.Email == email && u.DeletedAt == null);
         }
+
+        public async Task<User?> GetUserWithEmployeeAsync(long userId)
+        {
+            return await _dbSet
+                .Include(u => u.Employee)
+                .ThenInclude(e => e!.Department)
+                .Include(u => u.Employee)
+                .ThenInclude(e => e!.College)
+                .FirstOrDefaultAsync(u => u.Id == userId && u.DeletedAt == null);
+        }
+
+        public async Task<User?> GetUserWithEmployeeByEmailAsync(string email)
+        {
+            return await _dbSet
+                .Include(u => u.Employee)
+                .ThenInclude(e => e!.Department)
+                .Include(u => u.Employee)
+                .ThenInclude(e => e!.College)
+                .FirstOrDefaultAsync(u => u.Email == email && u.DeletedAt == null);
+        }
+
+        public async Task<User?> GetUserWithEmployeeAndDeptAsync(long userId)
+        {
+            return await _dbSet
+                .Include(u => u.Employee)
+                .ThenInclude(e => e!.Department)
+                .FirstOrDefaultAsync(u => u.Id == userId && u.DeletedAt == null);
+        }
     }
 }

@@ -1,5 +1,4 @@
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using Attendance_System.Models;
 using Attendance_System.Enums;
 using Attendance_System.Middleware;
@@ -30,9 +29,9 @@ namespace Attendance_System.Controllers
             [FromQuery] int page = 1,
             [FromQuery] int pageSize = 20)
         {
-            var query = _unitOfWork.Users.Query()
-                .Include(u => u.Employee).ThenInclude(e => e!.Department)
-                .Include(u => u.Employee).ThenInclude(e => e!.College)
+            var allUsers = await _unitOfWork.Users.GetAllAsync();
+
+            var query = allUsers
                 .Where(u => u.DeletedAt == null)
                 .AsQueryable();
 
@@ -45,9 +44,9 @@ namespace Attendance_System.Controllers
             if (!string.IsNullOrEmpty(search))
                 query = query.Where(u => u.Email.Contains(search) || (u.Employee != null && u.Employee.Name.Contains(search)));
 
-            var total = await query.CountAsync();
+            var total = query.Count();
 
-            var users = await query
+            var users = query
                 .OrderBy(u => u.Email)
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
@@ -70,7 +69,7 @@ namespace Attendance_System.Controllers
                         RoleClassification = u.Employee.RoleClassification
                     } : null
                 })
-                .ToListAsync();
+                .ToList();
 
             return Ok(new
             {
@@ -89,45 +88,41 @@ namespace Attendance_System.Controllers
         [HttpGet("{id}")]
         public async Task<IActionResult> GetById(long id)
         {
-            var user = await _unitOfWork.Users.Query()
-                .Include(u => u.Employee).ThenInclude(e => e!.Department)
-                .Include(u => u.Employee).ThenInclude(e => e!.College)
-                .Where(u => u.Id == id && u.DeletedAt == null)
-                .Select(u => new UserDetailDto
-                {
-                    Id = u.Id,
-                    Email = u.Email,
-                    Role = u.Role,
-                    IsActive = u.IsActive,
-                    CreatedAt = u.CreatedAt,
-                    LastLoginAt = u.LastLoginAt,
-                    Employee = u.Employee != null ? new UserEmployeeDetailDto
-                    {
-                        Id = u.Employee.Id,
-                        Name = u.Employee.Name,
-                        NameEn = u.Employee.NameEn,
-                        Phone = u.Employee.Phone,
-                        Gender = u.Employee.Gender,
-                        Department = u.Employee.Department != null ? u.Employee.Department.Name : null,
-                        College = u.Employee.College != null ? u.Employee.College.Name : null,
-                        Type = u.Employee.Type,
-                        RoleClassification = u.Employee.RoleClassification
-                    } : null
-                })
-                .FirstOrDefaultAsync();
+            var user = await _unitOfWork.Users.GetUserWithEmployeeAsync(id);
 
             if (user == null)
                 return NotFound(new { success = false, message = "User not found" });
 
-            return Ok(new { success = true, data = user });
+            var result = new UserDetailDto
+            {
+                Id = user.Id,
+                Email = user.Email,
+                Role = user.Role,
+                IsActive = user.IsActive,
+                CreatedAt = user.CreatedAt,
+                LastLoginAt = user.LastLoginAt,
+                Employee = user.Employee != null ? new UserEmployeeDetailDto
+                {
+                    Id = user.Employee.Id,
+                    Name = user.Employee.Name,
+                    NameEn = user.Employee.NameEn,
+                    Phone = user.Employee.Phone,
+                    Gender = user.Employee.Gender,
+                    Department = user.Employee.Department?.Name,
+                    College = user.Employee.College?.Name,
+                    Type = user.Employee.Type,
+                    RoleClassification = user.Employee.RoleClassification
+                } : null
+            };
+
+            return Ok(new { success = true, data = result });
         }
 
         [HttpPut("{id}")]
         public async Task<IActionResult> Update(long id, [FromBody] UpdateUserDto dto)
         {
-            var user = await _unitOfWork.Users.Query()
-                .FirstOrDefaultAsync(u => u.Id == id && u.DeletedAt == null);
-            if (user == null)
+            var user = await _unitOfWork.Users.GetByIdAsync(id);
+            if (user == null || user.DeletedAt != null)
                 return NotFound(new { success = false, message = "User not found" });
 
             if (!string.IsNullOrEmpty(dto.Email) && dto.Email != user.Email)
@@ -156,9 +151,8 @@ namespace Attendance_System.Controllers
         [HttpDelete("{id}")]
         public async Task<IActionResult> Delete(long id)
         {
-            var user = await _unitOfWork.Users.Query()
-                .FirstOrDefaultAsync(u => u.Id == id && u.DeletedAt == null);
-            if (user == null)
+            var user = await _unitOfWork.Users.GetByIdAsync(id);
+            if (user == null || user.DeletedAt != null)
                 return NotFound(new { success = false, message = "User not found" });
 
             user.DeletedAt = DateTime.UtcNow;
@@ -174,9 +168,8 @@ namespace Attendance_System.Controllers
         [HttpPut("{id}/toggle-status")]
         public async Task<IActionResult> ToggleStatus(long id)
         {
-            var user = await _unitOfWork.Users.Query()
-                .FirstOrDefaultAsync(u => u.Id == id && u.DeletedAt == null);
-            if (user == null)
+            var user = await _unitOfWork.Users.GetByIdAsync(id);
+            if (user == null || user.DeletedAt != null)
                 return NotFound(new { success = false, message = "User not found" });
 
             user.IsActive = !user.IsActive;

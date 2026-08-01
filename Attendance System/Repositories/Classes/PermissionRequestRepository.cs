@@ -26,5 +26,70 @@ namespace Attendance_System.Repositories.Classes
                                .Where(pr => pr.Status == LeaveStatus.Pending && pr.Employee != null && pr.Employee.DepartmentId == departmentId)
                                .ToListAsync();
         }
+
+        public async Task<IEnumerable<PermissionRequest>> GetByEmployeeIdWithDetailsAsync(string employeeId)
+        {
+            return await _dbSet
+                .Include(p => p.Employee).ThenInclude(e => e!.Department)
+                .Include(p => p.Approver)
+                .Where(p => p.EmployeeId == employeeId)
+                .OrderByDescending(p => p.CreatedAt)
+                .ToListAsync();
+        }
+
+        public async Task<IEnumerable<PermissionRequest>> GetPendingWithDetailsAsync()
+        {
+            return await _dbSet
+                .Include(p => p.Employee).ThenInclude(e => e!.Department)
+                .Include(p => p.Approver)
+                .Where(p => p.Status == LeaveStatus.Pending)
+                .OrderByDescending(p => p.CreatedAt)
+                .ToListAsync();
+        }
+
+        public async Task<IEnumerable<PermissionRequest>> GetPendingByDepartmentWithDetailsAsync(string departmentId)
+        {
+            return await _dbSet
+                .Include(p => p.Employee).ThenInclude(e => e!.Department)
+                .Include(p => p.Approver)
+                .Where(p => p.Status == LeaveStatus.Pending && p.Employee!.DepartmentId == departmentId)
+                .OrderByDescending(p => p.CreatedAt)
+                .ToListAsync();
+        }
+
+        public async Task<PermissionRequest?> GetPermissionRequestWithDetailsAsync(string id)
+        {
+            return await _dbSet
+                .Include(p => p.Employee)
+                .Include(p => p.Approver)
+                .FirstOrDefaultAsync(p => p.Id == id);
+        }
+
+        public async Task<int> GetPendingCountAsync()
+        {
+            return await _dbSet.CountAsync(p => p.Status == LeaveStatus.Pending);
+        }
+
+        public async Task<int> GetPendingCountByDepartmentAsync(string departmentId)
+        {
+            return await _dbSet
+                .Include(p => p.Employee)
+                .CountAsync(p => p.Status == LeaveStatus.Pending && p.Employee!.DepartmentId == departmentId);
+        }
+
+        public async Task<int> GetUsedMinutesByEmployeeAndDateRangeAsync(string employeeId, DateOnly startDate, DateOnly endDate)
+        {
+            return await _dbSet
+                .Where(p => p.EmployeeId == employeeId && p.Status == LeaveStatus.Approved && p.Date >= startDate && p.Date <= endDate)
+                .SumAsync(p => (int?)p.DurationMinutes) ?? 0;
+        }
+
+        public async Task<int> GetUsedMinutesByEmployeeAndDateRangeExcludingNursingAsync(string employeeId, DateOnly startDate, DateOnly endDate)
+        {
+            return await _dbSet
+                .Where(p => p.EmployeeId == employeeId && p.PermissionType != PermissionType.Nursing
+                    && p.Status == LeaveStatus.Approved && p.Date >= startDate && p.Date <= endDate)
+                .SumAsync(p => (int?)p.DurationMinutes) ?? 0;
+        }
     }
 }

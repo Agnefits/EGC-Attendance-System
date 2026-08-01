@@ -1,5 +1,4 @@
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using Attendance_System.Models;
 using Attendance_System.Enums;
 using Attendance_System.Middleware;
@@ -23,7 +22,9 @@ namespace Attendance_System.Controllers
         [AuthorizedRoles]
         public async Task<IActionResult> GetAll()
         {
-            var colleges = await _unitOfWork.Colleges.Query()
+            var colleges = await _unitOfWork.Colleges.GetAllAsync();
+
+            var result = colleges
                 .Where(c => c.DeletedAt == null)
                 .OrderBy(c => c.Name)
                 .Select(c => new CollegeListItemDto
@@ -32,55 +33,52 @@ namespace Attendance_System.Controllers
                     Name = c.Name,
                     NameEn = c.NameEn,
                     Code = c.Code,
-                    DepartmentsCount = c.Departments.Count(d => d.DeletedAt == null),
-                    EmployeesCount = c.Employees.Count(e => e.DeletedAt == null),
+                    DepartmentsCount = c.Departments?.Count(d => d.DeletedAt == null) ?? 0,
+                    EmployeesCount = c.Employees?.Count(e => e.DeletedAt == null) ?? 0,
                     CreatedAt = c.CreatedAt
-                })
-                .ToListAsync();
+                });
 
-            return Ok(new { success = true, data = colleges });
+            return Ok(new { success = true, data = result });
         }
 
         [HttpGet("{id}")]
         [AuthorizedRoles]
         public async Task<IActionResult> GetById(string id)
         {
-            var college = await _unitOfWork.Colleges.Query()
-                .Where(c => c.Id == id && c.DeletedAt == null)
-                .Select(c => new CollegeDetailDto
-                {
-                    Id = c.Id,
-                    Name = c.Name,
-                    NameEn = c.NameEn,
-                    Code = c.Code,
-                    Departments = c.Departments
-                        .Where(d => d.DeletedAt == null)
-                        .Select(d => new CollegeDepartmentDto
-                        {
-                            Id = d.Id,
-                            Name = d.Name,
-                            NameEn = d.NameEn,
-                            Code = d.Code,
-                            DeptType = d.DeptType
-                        }).ToList(),
-                    CreatedAt = c.CreatedAt,
-                    UpdatedAt = c.UpdatedAt
-                })
-                .FirstOrDefaultAsync();
+            var college = await _unitOfWork.Colleges.GetCollegeWithDepartmentsAsync(id);
 
             if (college == null)
                 return NotFound(new { success = false, message = "College not found" });
 
-            return Ok(new { success = true, data = college });
+            var result = new CollegeDetailDto
+            {
+                Id = college.Id,
+                Name = college.Name,
+                NameEn = college.NameEn,
+                Code = college.Code,
+                Departments = college.Departments?
+                    .Where(d => d.DeletedAt == null)
+                    .Select(d => new CollegeDepartmentDto
+                    {
+                        Id = d.Id,
+                        Name = d.Name,
+                        NameEn = d.NameEn,
+                        Code = d.Code,
+                        DeptType = d.DeptType
+                    }).ToList() ?? new List<CollegeDepartmentDto>(),
+                CreatedAt = college.CreatedAt,
+                UpdatedAt = college.UpdatedAt
+            };
+
+            return Ok(new { success = true, data = result });
         }
 
         [HttpPost]
         [AuthorizedRoles(UserRole.Admin)]
         public async Task<IActionResult> Create([FromBody] CreateCollegeDto dto)
         {
-            var codeExists = await _unitOfWork.Colleges.Query()
-                .AnyAsync(c => c.Code == dto.Code && c.DeletedAt == null);
-            if (codeExists)
+            var existing = await _unitOfWork.Colleges.GetByCodeAsync(dto.Code);
+            if (existing != null)
                 return BadRequest(new { success = false, message = "College code already exists" });
 
             var college = new College
@@ -108,16 +106,14 @@ namespace Attendance_System.Controllers
         [AuthorizedRoles(UserRole.Admin)]
         public async Task<IActionResult> Update(string id, [FromBody] UpdateCollegeDto dto)
         {
-            var college = await _unitOfWork.Colleges.Query()
-                .FirstOrDefaultAsync(c => c.Id == id && c.DeletedAt == null);
-            if (college == null)
+            var college = await _unitOfWork.Colleges.GetByIdAsync(id);
+            if (college == null || college.DeletedAt != null)
                 return NotFound(new { success = false, message = "College not found" });
 
             if (!string.IsNullOrEmpty(dto.Code) && dto.Code != college.Code)
             {
-                var codeExists = await _unitOfWork.Colleges.Query()
-                    .AnyAsync(c => c.Code == dto.Code && c.Id != id && c.DeletedAt == null);
-                if (codeExists)
+                var existing = await _unitOfWork.Colleges.GetByCodeAsync(dto.Code);
+                if (existing != null && existing.Id != id)
                     return BadRequest(new { success = false, message = "College code already exists" });
                 college.Code = dto.Code;
             }
@@ -141,13 +137,11 @@ namespace Attendance_System.Controllers
         [AuthorizedRoles(UserRole.Admin)]
         public async Task<IActionResult> Delete(string id)
         {
-            var college = await _unitOfWork.Colleges.Query()
-                .FirstOrDefaultAsync(c => c.Id == id && c.DeletedAt == null);
-            if (college == null)
+            var college = await _unitOfWork.Colleges.GetByIdAsync(id);
+            if (college == null || college.DeletedAt != null)
                 return NotFound(new { success = false, message = "College not found" });
 
-            var hasActiveDepts = await _unitOfWork.Departments.Query()
-                .AnyAsync(d => d.CollegeId == id && d.DeletedAt == null);
+            var hasActiveDepts = await _unitOfWork.Colleges.HasActiveDepartmentsAsync(id);
             if (hasActiveDepts)
                 return BadRequest(new { success = false, message = "Cannot delete a college that still has active departments" });
 

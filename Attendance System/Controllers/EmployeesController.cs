@@ -1,5 +1,4 @@
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using Attendance_System.Models;
 using Attendance_System.Enums;
 using Attendance_System.Middleware;
@@ -29,10 +28,9 @@ namespace Attendance_System.Controllers
             [FromQuery] int page = 1,
             [FromQuery] int pageSize = 20)
         {
-            var query = _unitOfWork.Employees.Query()
-                .Include(e => e.Department)
-                .Include(e => e.College)
-                .Include(e => e.User)
+            var allEmployees = await _unitOfWork.Employees.GetAllAsync();
+
+            var query = allEmployees
                 .Where(e => e.DeletedAt == null)
                 .AsQueryable();
 
@@ -45,9 +43,9 @@ namespace Attendance_System.Controllers
             if (!string.IsNullOrEmpty(search))
                 query = query.Where(e => e.Name.Contains(search) || e.NameEn.Contains(search) || e.Email.Contains(search));
 
-            var total = await query.CountAsync();
+            var total = query.Count();
 
-            var employees = await query
+            var employees = query
                 .OrderBy(e => e.Name)
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
@@ -69,7 +67,7 @@ namespace Attendance_System.Controllers
                     HasUserAccount = e.User != null,
                     CreatedAt = e.CreatedAt
                 })
-                .ToListAsync();
+                .ToList();
 
             return Ok(new
             {
@@ -89,49 +87,44 @@ namespace Attendance_System.Controllers
         [AuthorizedRoles]
         public async Task<IActionResult> GetById(string id)
         {
-            var employee = await _unitOfWork.Employees.Query()
-                .Include(e => e.Department)
-                .Include(e => e.College)
-                .Include(e => e.User)
-                .Where(e => e.Id == id && e.DeletedAt == null)
-                .Select(e => new EmployeeDetailDto
-                {
-                    Id = e.Id,
-                    Name = e.Name,
-                    NameEn = e.NameEn,
-                    Email = e.Email,
-                    Phone = e.Phone,
-                    Gender = e.Gender,
-                    RoleClassification = e.RoleClassification,
-                    Type = e.Type,
-                    AcademicRank = e.AcademicRank,
-                    HeadType = e.HeadType,
-                    Status = e.Status,
-                    Department = e.Department != null ? e.Department.Name : null,
-                    College = e.College != null ? e.College.Name : null,
-                    User = e.User != null ? new EmployeeUserSummaryDto
-                    {
-                        Id = e.User.Id,
-                        Email = e.User.Email,
-                        Role = e.User.Role,
-                        IsActive = e.User.IsActive
-                    } : null
-                })
-                .FirstOrDefaultAsync();
+            var employee = await _unitOfWork.Employees.GetEmployeeWithDepartmentAndCollegeAsync(id);
 
             if (employee == null)
                 return NotFound(new { success = false, message = "Employee not found" });
 
-            return Ok(new { success = true, data = employee });
+            var result = new EmployeeDetailDto
+            {
+                Id = employee.Id,
+                Name = employee.Name,
+                NameEn = employee.NameEn,
+                Email = employee.Email,
+                Phone = employee.Phone,
+                Gender = employee.Gender,
+                RoleClassification = employee.RoleClassification,
+                Type = employee.Type,
+                AcademicRank = employee.AcademicRank,
+                HeadType = employee.HeadType,
+                Status = employee.Status,
+                Department = employee.Department?.Name,
+                College = employee.College?.Name,
+                User = employee.User != null ? new EmployeeUserSummaryDto
+                {
+                    Id = employee.User.Id,
+                    Email = employee.User.Email,
+                    Role = employee.User.Role,
+                    IsActive = employee.User.IsActive
+                } : null
+            };
+
+            return Ok(new { success = true, data = result });
         }
 
         [HttpPost]
         [AuthorizedRoles(UserRole.Admin, UserRole.Hr)]
         public async Task<IActionResult> Create([FromBody] CreateEmployeeDto dto)
         {
-            var emailExists = await _unitOfWork.Employees.Query()
-                .AnyAsync(e => e.Email == dto.Email && e.DeletedAt == null);
-            if (emailExists)
+            var existing = await _unitOfWork.Employees.GetByEmailAsync(dto.Email);
+            if (existing != null)
                 return BadRequest(new { success = false, message = "Employee email already exists" });
 
             var employee = new Employee
@@ -168,8 +161,7 @@ namespace Attendance_System.Controllers
         [AuthorizedRoles(UserRole.Admin, UserRole.Hr)]
         public async Task<IActionResult> Update(string id, [FromBody] UpdateEmployeeDto dto)
         {
-            var employee = await _unitOfWork.Employees.Query()
-                .FirstOrDefaultAsync(e => e.Id == id && e.DeletedAt == null);
+            var employee = await _unitOfWork.Employees.GetEmployeeWithDepartmentAndCollegeAsync(id);
             if (employee == null)
                 return NotFound(new { success = false, message = "Employee not found" });
 
@@ -201,10 +193,7 @@ namespace Attendance_System.Controllers
         [AuthorizedRoles(UserRole.Admin)]
         public async Task<IActionResult> Delete(string id)
         {
-            var employee = await _unitOfWork.Employees.Query()
-                .Include(e => e.User)
-                .FirstOrDefaultAsync(e => e.Id == id && e.DeletedAt == null);
-
+            var employee = await _unitOfWork.Employees.GetEmployeeWithUserAsync(id);
             if (employee == null)
                 return NotFound(new { success = false, message = "Employee not found" });
 

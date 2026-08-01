@@ -28,5 +28,54 @@ namespace Attendance_System.Repositories.Classes
         {
             return await _dbSet.Where(e => e.CollegeId == collegeId && e.DeletedAt == null).ToListAsync();
         }
+
+        public async Task<Employee?> GetEmployeeWithDepartmentAndCollegeAsync(string employeeId)
+        {
+            return await _dbSet
+                .Include(e => e.Department)
+                .Include(e => e.College)
+                .Include(e => e.User)
+                .FirstOrDefaultAsync(e => e.Id == employeeId && e.DeletedAt == null);
+        }
+
+        public async Task<Employee?> GetEmployeeWithUserAsync(string employeeId)
+        {
+            return await _dbSet
+                .Include(e => e.User)
+                .FirstOrDefaultAsync(e => e.Id == employeeId && e.DeletedAt == null);
+        }
+
+        public async Task<Employee?> GetEmployeeWithDepartmentAndUserAsync(string employeeId)
+        {
+            return await _dbSet
+                .Include(e => e.Department)
+                .Include(e => e.User)
+                .FirstOrDefaultAsync(e => e.Id == employeeId && e.DeletedAt == null);
+        }
+
+        public async Task<IEnumerable<Employee>> GetActiveEmployeesByDepartmentAsync(string departmentId)
+        {
+            return await _dbSet
+                .Where(e => e.DepartmentId == departmentId && e.DeletedAt == null && e.Status == "active")
+                .ToListAsync();
+        }
+
+        public async Task<int> GetActiveEmployeesCountAsync()
+        {
+            return await _dbSet.CountAsync(e => e.DeletedAt == null && e.Status == "active");
+        }
+
+        public async Task<int> GetActiveEmployeesCountByDepartmentAsync(string departmentId)
+        {
+            return await _dbSet.CountAsync(e => e.DepartmentId == departmentId && e.DeletedAt == null && e.Status == "active");
+        }
+
+        public async Task<string?> GetDepartmentIdByEmployeeIdAsync(string employeeId)
+        {
+            return await _dbSet
+                .Where(e => e.Id == employeeId && e.DeletedAt == null)
+                .Select(e => e.DepartmentId)
+                .FirstOrDefaultAsync();
+        }
     }
 }

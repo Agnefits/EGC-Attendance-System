@@ -1,12 +1,12 @@
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using System.Security.Claims;
-using Attendance_System.Models;
+using Attendance_System.DTOs.Dashboard;
 using Attendance_System.Enums;
 using Attendance_System.Middleware;
+using Attendance_System.Models;
 using Attendance_System.UnitOfWork;
-using Attendance_System.DTOs.Dashboard;
-using Attendance_System.DTOs.Attendance;
+using Microsoft.AspNetCore.Mvc;
+using System;
+using System.Security.Claims;
+using System.Threading.Tasks;
 
 namespace Attendance_System.Controllers
 {
@@ -41,43 +41,34 @@ namespace Attendance_System.Controllers
         {
             var today = DateOnly.FromDateTime(DateTime.Today);
 
-            var total = await _unitOfWork.AttendanceLogs.Query().CountAsync();
-            var present = await _unitOfWork.AttendanceLogs.Query()
-                .CountAsync(a => a.Status == AttendanceStatus.Present || a.Status == AttendanceStatus.Left);
-            var absent = await _unitOfWork.AttendanceLogs.Query()
-                .CountAsync(a => a.Status == AttendanceStatus.Absent);
-            var late = await _unitOfWork.AttendanceLogs.Query()
-                .CountAsync(a => a.Status == AttendanceStatus.Late);
+            var statusCounts = await _unitOfWork.AttendanceLogs.GetStatusCountsAsync(null, null, null);
+            var todayCounts = await _unitOfWork.AttendanceLogs.GetStatusCountsAsync(today, today, null);
 
-            var todayLogs = _unitOfWork.AttendanceLogs.Query().Where(a => a.Date == today);
+            var total = statusCounts.Values.Sum();
+            var present = statusCounts.GetValueOrDefault(AttendanceStatus.Present, 0) +
+                          statusCounts.GetValueOrDefault(AttendanceStatus.Left, 0);
+            var absent = statusCounts.GetValueOrDefault(AttendanceStatus.Absent, 0);
+            var late = statusCounts.GetValueOrDefault(AttendanceStatus.Late, 0);
 
-            var byDept = await _unitOfWork.AttendanceLogs.Query()
-                .Include(a => a.Employee).ThenInclude(e => e!.Department)
-                .Where(a => a.Employee != null && a.Employee.DepartmentId != null)
-                .GroupBy(a => new { a.Employee!.DepartmentId, Name = a.Employee.Department!.Name })
-                .Select(g => new
-                {
-                    g.Key.DepartmentId,
-                    Department = g.Key.Name,
-                    Present = g.Count(a => a.Status == AttendanceStatus.Present || a.Status == AttendanceStatus.Left),
-                    Absent = g.Count(a => a.Status == AttendanceStatus.Absent),
-                    Late = g.Count(a => a.Status == AttendanceStatus.Late),
-                    Total = g.Count()
-                })
-                .ToListAsync();
+            var deptSummary = await _unitOfWork.AttendanceLogs.GetDepartmentAttendanceSummaryAsync(null, null);
 
-            var departments = byDept
+            var departments = deptSummary.Values
                 .Select(d => new DepartmentPerformanceDto
                 {
                     DepartmentId = d.DepartmentId,
-                    Department = d.Department,
+                    Department = d.DepartmentName,
                     Present = d.Present,
                     Absent = d.Absent,
                     Late = d.Late,
-                    Pct = d.Total > 0 ? (int)Math.Round((double)d.Present / d.Total * 100) : 0
+                    Pct = (int)Math.Round(d.AttendanceRate)
                 })
                 .OrderByDescending(d => d.Pct)
                 .ToList();
+
+            var todayPresent = todayCounts.GetValueOrDefault(AttendanceStatus.Present, 0) +
+                               todayCounts.GetValueOrDefault(AttendanceStatus.Left, 0);
+            var todayAbsent = todayCounts.GetValueOrDefault(AttendanceStatus.Absent, 0);
+            var todayLate = todayCounts.GetValueOrDefault(AttendanceStatus.Late, 0);
 
             return new DashboardDto
             {
@@ -90,16 +81,13 @@ namespace Attendance_System.Controllers
                 },
                 Today = new TodayDto
                 {
-                    Present = await todayLogs.CountAsync(a => a.Status == AttendanceStatus.Present || a.Status == AttendanceStatus.Left),
-                    Absent = await todayLogs.CountAsync(a => a.Status == AttendanceStatus.Absent),
-                    Late = await todayLogs.CountAsync(a => a.Status == AttendanceStatus.Late)
+                    Present = todayPresent,
+                    Absent = todayAbsent,
+                    Late = todayLate
                 },
-                PendingLeaves = await _unitOfWork.LeaveRequests.Query()
-                    .CountAsync(l => l.Status == LeaveStatus.Pending),
-                PendingPermissions = await _unitOfWork.PermissionRequests.Query()
-                    .CountAsync(p => p.Status == LeaveStatus.Pending),
-                OnLeaveToday = await _unitOfWork.LeaveRequests.Query()
-                    .CountAsync(l => l.Status == LeaveStatus.Approved && l.FromDate <= today && l.ToDate >= today),
+                PendingLeaves = await _unitOfWork.LeaveRequests.GetPendingCountAsync(),
+                PendingPermissions = await _unitOfWork.PermissionRequests.GetPendingCountAsync(),
+                OnLeaveToday = await _unitOfWork.LeaveRequests.GetApprovedLeavesOnDateAsync(today),
                 Departments = departments,
                 ConsecutiveAbsences = await GetConsecutiveAbsencesAsync(today, null)
             };
@@ -107,25 +95,30 @@ namespace Attendance_System.Controllers
 
         private async Task<HeadDashboardDto> BuildHeadAsync(string? employeeId)
         {
-            var deptId = await _unitOfWork.Employees.Query()
-                .Where(e => e.Id == employeeId)
-                .Select(e => e.DepartmentId)
-                .FirstOrDefaultAsync();
+            var deptId = await _unitOfWork.Employees.GetDepartmentIdByEmployeeIdAsync(employeeId!);
+            if (deptId == null)
+                return new HeadDashboardDto();
 
             var today = DateOnly.FromDateTime(DateTime.Today);
-            var deptLogs = _unitOfWork.AttendanceLogs.Query()
-                .Where(a => a.Employee!.DepartmentId == deptId);
 
-            var present = await deptLogs.CountAsync(a => a.Status == AttendanceStatus.Present || a.Status == AttendanceStatus.Left);
-            var absent = await deptLogs.CountAsync(a => a.Status == AttendanceStatus.Absent);
-            var late = await deptLogs.CountAsync(a => a.Status == AttendanceStatus.Late);
-            var total = await deptLogs.CountAsync();
+            var statusCounts = await _unitOfWork.AttendanceLogs.GetStatusCountsAsync(null, null, deptId);
+            var todayCounts = await _unitOfWork.AttendanceLogs.GetStatusCountsAsync(today, today, deptId);
+
+            var total = statusCounts.Values.Sum();
+            var present = statusCounts.GetValueOrDefault(AttendanceStatus.Present, 0) +
+                          statusCounts.GetValueOrDefault(AttendanceStatus.Left, 0);
+            var absent = statusCounts.GetValueOrDefault(AttendanceStatus.Absent, 0);
+            var late = statusCounts.GetValueOrDefault(AttendanceStatus.Late, 0);
+
+            var todayPresent = todayCounts.GetValueOrDefault(AttendanceStatus.Present, 0) +
+                               todayCounts.GetValueOrDefault(AttendanceStatus.Left, 0);
+            var todayAbsent = todayCounts.GetValueOrDefault(AttendanceStatus.Absent, 0);
+            var todayLate = todayCounts.GetValueOrDefault(AttendanceStatus.Late, 0);
 
             return new HeadDashboardDto
             {
                 DepartmentId = deptId,
-                EmployeesCount = await _unitOfWork.Employees.Query()
-                    .CountAsync(e => e.DepartmentId == deptId && e.DeletedAt == null && e.Status == "active"),
+                EmployeesCount = await _unitOfWork.Employees.GetActiveEmployeesCountByDepartmentAsync(deptId),
                 Overall = new OverallDto
                 {
                     Present = present,
@@ -133,10 +126,8 @@ namespace Attendance_System.Controllers
                     Late = late,
                     Rate = total > 0 ? (int)Math.Round((double)present / total * 100) : 0
                 },
-                PendingLeaves = await _unitOfWork.LeaveRequests.Query()
-                    .CountAsync(l => l.Status == LeaveStatus.Pending && l.Employee!.DepartmentId == deptId),
-                PendingPermissions = await _unitOfWork.PermissionRequests.Query()
-                    .CountAsync(p => p.Status == LeaveStatus.Pending && p.Employee!.DepartmentId == deptId),
+                PendingLeaves = await _unitOfWork.LeaveRequests.GetPendingCountByDepartmentAsync(deptId),
+                PendingPermissions = await _unitOfWork.PermissionRequests.GetPendingCountByDepartmentAsync(deptId),
                 ConsecutiveAbsences = await GetConsecutiveAbsencesAsync(today, deptId)
             };
         }
@@ -146,13 +137,13 @@ namespace Attendance_System.Controllers
             var today = DateOnly.FromDateTime(DateTime.Today);
             var monthStart = new DateOnly(today.Year, today.Month, 1);
 
-            var myLogs = _unitOfWork.AttendanceLogs.Query().Where(a => a.EmployeeId == employeeId);
+            var myLogs = await _unitOfWork.AttendanceLogs.GetByEmployeeWithDateRangeAsync(employeeId!, null, null);
 
-            var present = await myLogs.CountAsync(a => a.Status == AttendanceStatus.Present || a.Status == AttendanceStatus.Left);
-            var absent = await myLogs.CountAsync(a => a.Status == AttendanceStatus.Absent);
-            var late = await myLogs.CountAsync(a => a.Status == AttendanceStatus.Late);
+            var present = myLogs.Count(a => a.Status == AttendanceStatus.Present || a.Status == AttendanceStatus.Left);
+            var absent = myLogs.Count(a => a.Status == AttendanceStatus.Absent);
+            var late = myLogs.Count(a => a.Status == AttendanceStatus.Late);
 
-            var todayRecord = await myLogs
+            var todayRecord = myLogs
                 .Where(a => a.Date == today)
                 .Select(a => new TodayRecordDto
                 {
@@ -160,11 +151,11 @@ namespace Attendance_System.Controllers
                     CheckIn = a.CheckIn,
                     CheckOut = a.CheckOut
                 })
-                .FirstOrDefaultAsync();
+                .FirstOrDefault();
 
-            var monthPresentDays = await myLogs.CountAsync(a =>
-                a.Date >= monthStart && a.Date <= today &&
-                (a.Status == AttendanceStatus.Present || a.Status == AttendanceStatus.Left || a.Status == AttendanceStatus.Late));
+            var monthPresentDays = await _unitOfWork.AttendanceLogs.GetCountByEmployeeAndDateRangeAsync(employeeId!, monthStart, today);
+
+            var leaves = await _unitOfWork.LeaveRequests.GetByEmployeeIdAsync(employeeId!);
 
             return new EmployeeDashboardDto
             {
@@ -176,43 +167,29 @@ namespace Attendance_System.Controllers
                 },
                 Today = todayRecord,
                 MonthPresentDays = monthPresentDays,
-                PendingLeaves = await _unitOfWork.LeaveRequests.Query()
-                    .CountAsync(l => l.EmployeeId == employeeId && l.Status == LeaveStatus.Pending),
-                ApprovedLeaves = await _unitOfWork.LeaveRequests.Query()
-                    .CountAsync(l => l.EmployeeId == employeeId && l.Status == LeaveStatus.Approved),
-                UsedPermissionMinutes = await _unitOfWork.PermissionRequests.Query()
-                    .Where(p => p.EmployeeId == employeeId && p.Status == LeaveStatus.Approved
-                                && p.Date >= monthStart && p.Date <= today)
-                    .SumAsync(p => (int?)p.DurationMinutes) ?? 0
+                PendingLeaves = leaves.Count(l => l.Status == LeaveStatus.Pending),
+                ApprovedLeaves = leaves.Count(l => l.Status == LeaveStatus.Approved),
+                UsedPermissionMinutes = await _unitOfWork.PermissionRequests.GetUsedMinutesByEmployeeAndDateRangeAsync(employeeId!, monthStart, today)
             };
         }
 
         private async Task<ConsecutiveAbsencesDto> GetConsecutiveAbsencesAsync(DateOnly today, string? departmentId)
         {
-            var yesterday = today.AddDays(-1);
-            var dayBefore = today.AddDays(-2);
+            var offenders = await _unitOfWork.AttendanceLogs.GetConsecutiveAbsencesAsync(today, departmentId);
 
-            var q = _unitOfWork.AttendanceLogs.Query()
-                .Include(a => a.Employee)
-                .Where(a => (a.Date == yesterday || a.Date == dayBefore) && a.Status == AttendanceStatus.Absent);
-
-            if (!string.IsNullOrEmpty(departmentId))
-                q = q.Where(a => a.Employee!.DepartmentId == departmentId);
-
-            var offenders = await q
-                .GroupBy(a => new { a.EmployeeId, Name = a.Employee!.Name })
-                .Where(g => g.Count() >= 2)
+            var result = offenders
+                .GroupBy(a => new { a.EmployeeId, Name = a.Employee?.Name ?? string.Empty })
                 .Select(g => new ConsecutiveAbsentEmployeeDto
                 {
                     EmployeeId = g.Key.EmployeeId,
                     Name = g.Key.Name
                 })
-                .ToListAsync();
+                .ToList();
 
             return new ConsecutiveAbsencesDto
             {
-                Count = offenders.Count,
-                Employees = offenders
+                Count = result.Count,
+                Employees = result
             };
         }
     }

@@ -8,5 +8,9 @@ namespace Attendance_System.Repositories.Interfaces
         Task<User?> GetByEmailAsync(string email);
         Task<User?> GetByEmployeeIdAsync(string employeeId);
         Task<bool> ExistsByEmailAsync(string email);
+
+        Task<User?> GetUserWithEmployeeAsync(long userId);
+        Task<User?> GetUserWithEmployeeByEmailAsync(string email);
+        Task<User?> GetUserWithEmployeeAndDeptAsync(long userId);
     }
 }

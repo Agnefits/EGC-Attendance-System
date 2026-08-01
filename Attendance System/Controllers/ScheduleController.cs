@@ -1,5 +1,4 @@
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using Attendance_System.Models;
 using Attendance_System.Enums;
 using Attendance_System.Middleware;
@@ -23,21 +22,21 @@ namespace Attendance_System.Controllers
         [AuthorizedRoles]
         public async Task<IActionResult> GetWorkSchedules()
         {
-            var schedules = await _unitOfWork.WorkSchedules.Query()
-                .Select(ws => new WorkScheduleDto
-                {
-                    Id = ws.Id,
-                    Title = ws.Title,
-                    TimeMode = ws.TimeMode,
-                    CheckInTime = ws.CheckInTime,
-                    CheckOutTime = ws.CheckOutTime,
-                    HoursPerDay = ws.HoursPerDay,
-                    DaysPerWeek = ws.DaysPerWeek,
-                    TargetScope = ws.TargetScope
-                })
-                .ToListAsync();
+            var schedules = await _unitOfWork.WorkSchedules.GetAllAsync();
 
-            return Ok(new { success = true, data = schedules });
+            var result = schedules.Select(ws => new WorkScheduleDto
+            {
+                Id = ws.Id,
+                Title = ws.Title,
+                TimeMode = ws.TimeMode,
+                CheckInTime = ws.CheckInTime,
+                CheckOutTime = ws.CheckOutTime,
+                HoursPerDay = ws.HoursPerDay,
+                DaysPerWeek = ws.DaysPerWeek,
+                TargetScope = ws.TargetScope
+            });
+
+            return Ok(new { success = true, data = result });
         }
 
         [HttpPost("work")]
@@ -86,6 +85,21 @@ namespace Attendance_System.Controllers
             if (string.IsNullOrEmpty(dto.EmployeeId) && string.IsNullOrEmpty(dto.DepartmentId))
                 return BadRequest(new { success = false, message = "Either EmployeeId or DepartmentId must be provided" });
 
+            // Check if assignment already exists
+            if (!string.IsNullOrEmpty(dto.EmployeeId))
+            {
+                var exists = await _unitOfWork.ScheduleAssignments.AssignmentExistsForEmployeeAsync(dto.EmployeeId);
+                if (exists)
+                    return BadRequest(new { success = false, message = "Employee already has a schedule assignment" });
+            }
+
+            if (!string.IsNullOrEmpty(dto.DepartmentId))
+            {
+                var exists = await _unitOfWork.ScheduleAssignments.AssignmentExistsForDepartmentAsync(dto.DepartmentId);
+                if (exists)
+                    return BadRequest(new { success = false, message = "Department already has a schedule assignment" });
+            }
+
             var assignment = new ScheduleAssignment
             {
                 ScheduleId = dto.ScheduleId,
@@ -108,19 +122,14 @@ namespace Attendance_System.Controllers
         [AuthorizedRoles]
         public async Task<IActionResult> GetEmployeeSchedule(string employeeId)
         {
-            var assignment = await _unitOfWork.ScheduleAssignments.Query()
-                .Include(sa => sa.Schedule)
-                .FirstOrDefaultAsync(sa => sa.EmployeeId == employeeId);
+            var assignment = await _unitOfWork.ScheduleAssignments.GetByEmployeeIdWithScheduleAsync(employeeId);
 
             if (assignment?.Schedule == null)
             {
-                var employee = await _unitOfWork.Employees.Query()
-                    .FirstOrDefaultAsync(e => e.Id == employeeId && e.DeletedAt == null);
-                if (employee?.DepartmentId != null)
+                var departmentId = await _unitOfWork.Employees.GetDepartmentIdByEmployeeIdAsync(employeeId);
+                if (departmentId != null)
                 {
-                    assignment = await _unitOfWork.ScheduleAssignments.Query()
-                        .Include(sa => sa.Schedule)
-                        .FirstOrDefaultAsync(sa => sa.DepartmentId == employee.DepartmentId);
+                    assignment = await _unitOfWork.ScheduleAssignments.GetByDepartmentIdWithScheduleAsync(departmentId);
                 }
             }
 

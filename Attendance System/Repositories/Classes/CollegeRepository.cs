@@ -16,5 +16,20 @@ namespace Attendance_System.Repositories.Classes
         {
             return await _dbSet.FirstOrDefaultAsync(c => c.Code == code);
         }
+
+        public async Task<College?> GetCollegeWithDepartmentsAsync(string collegeId)
+        {
+            return await _dbSet
+                .Include(c => c.Departments.Where(d => d.DeletedAt == null))
+                .FirstOrDefaultAsync(c => c.Id == collegeId && c.DeletedAt == null);
+        }
+
+        public async Task<bool> HasActiveDepartmentsAsync(string collegeId)
+        {
+            return await _dbSet
+                .Where(c => c.Id == collegeId && c.DeletedAt == null)
+                .SelectMany(c => c.Departments)
+                .AnyAsync(d => d.DeletedAt == null);
+        }
     }
 }

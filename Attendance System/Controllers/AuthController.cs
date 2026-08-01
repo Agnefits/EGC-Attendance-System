@@ -1,5 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Authorization;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using Attendance_System.Models;
@@ -8,7 +8,6 @@ using Attendance_System.Services;
 using Attendance_System.Middleware;
 using Attendance_System.UnitOfWork;
 using Attendance_System.DTOs.Auth;
-using Microsoft.AspNetCore.Authorization;
 
 namespace Attendance_System.Controllers
 {
@@ -34,12 +33,7 @@ namespace Attendance_System.Controllers
         [AllowAnonymous]
         public async Task<IActionResult> Login([FromBody] LoginDto dto)
         {
-            var user = await _unitOfWork.Users.Query()
-                .Include(u => u.Employee)
-                .ThenInclude(e => e!.Department)
-                .Include(u => u.Employee)
-                .ThenInclude(e => e!.College)
-                .FirstOrDefaultAsync(u => u.Email == dto.Email && u.DeletedAt == null);
+            var user = await _unitOfWork.Users.GetUserWithEmployeeByEmailAsync(dto.Email);
 
             if (user == null)
                 return Unauthorized(new { success = false, message = "Invalid email" });
@@ -79,14 +73,12 @@ namespace Attendance_System.Controllers
         [AuthorizedRoles(UserRole.Admin)]
         public async Task<IActionResult> Register([FromBody] RegisterDto dto)
         {
-            var userEmailExists = await _unitOfWork.Users.Query()
-                .AnyAsync(u => u.Email == dto.Email && u.DeletedAt == null);
+            var userEmailExists = await _unitOfWork.Users.ExistsByEmailAsync(dto.Email);
             if (userEmailExists)
                 return BadRequest(new { success = false, message = "Email is already registered" });
 
-            var employeeEmailExists = await _unitOfWork.Employees.Query()
-                .AnyAsync(e => e.Email == dto.Email && e.DeletedAt == null);
-            if (employeeEmailExists)
+            var employeeEmailExists = await _unitOfWork.Employees.GetByEmailAsync(dto.Email);
+            if (employeeEmailExists != null)
                 return BadRequest(new { success = false, message = "Employee email already exists" });
 
             var employee = new Employee
@@ -137,8 +129,7 @@ namespace Attendance_System.Controllers
         [HttpPost("change-password")]
         public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordDto dto)
         {
-            var user = await _unitOfWork.Users.Query()
-                .FirstOrDefaultAsync(u => u.Id == dto.UserId && u.DeletedAt == null);
+            var user = await _unitOfWork.Users.GetByIdAsync(dto.UserId);
             if (user == null)
                 return NotFound(new { success = false, message = "User not found" });
 
@@ -167,12 +158,7 @@ namespace Attendance_System.Controllers
             if (userId == null)
                 return Unauthorized();
 
-            var user = await _unitOfWork.Users.Query()
-                .Include(u => u.Employee)
-                .ThenInclude(e => e!.Department)
-                .Include(u => u.Employee)
-                .ThenInclude(e => e!.College)
-                .FirstOrDefaultAsync(u => u.Id == userId && u.DeletedAt == null);
+            var user = await _unitOfWork.Users.GetUserWithEmployeeAsync(userId.Value);
 
             if (user == null)
                 return NotFound();

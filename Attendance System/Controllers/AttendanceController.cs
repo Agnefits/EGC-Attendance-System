@@ -1,13 +1,14 @@
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using System.Globalization;
-using System.Security.Claims;
-using Attendance_System.Models;
+using Attendance_System.DTOs.Attendance;
 using Attendance_System.Enums;
 using Attendance_System.Middleware;
+using Attendance_System.Models;
 using Attendance_System.UnitOfWork;
-using Attendance_System.DTOs.Attendance;
-using Attendance_System.DTOs.Dashboard;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using System;
+using System.Globalization;
+using System.Security.Claims;
+using System.Threading.Tasks;
 
 namespace Attendance_System.Controllers
 {
@@ -29,53 +30,40 @@ namespace Attendance_System.Controllers
         [HttpGet]
         [AuthorizedRoles(UserRole.Admin, UserRole.Hr, UserRole.Head)]
         public async Task<IActionResult> GetAll(
-            [FromQuery] DateOnly? from,
-            [FromQuery] DateOnly? to,
-            [FromQuery] string? employeeId,
-            [FromQuery] string? departmentId,
-            [FromQuery] AttendanceStatus? status,
-            [FromQuery] int page = 1,
-            [FromQuery] int pageSize = 20)
+    [FromQuery] DateOnly? from,
+    [FromQuery] DateOnly? to,
+    [FromQuery] string? employeeId,
+    [FromQuery] string? departmentId,
+    [FromQuery] AttendanceStatus? status,
+    [FromQuery] int page = 1,
+    [FromQuery] int pageSize = 20)
         {
-            var query = _unitOfWork.AttendanceLogs.Query()
-                .Include(a => a.Employee).ThenInclude(e => e!.Department)
-                .Include(a => a.Employee).ThenInclude(e => e!.College)
-                .AsQueryable();
+            var total = await _unitOfWork.AttendanceLogs.GetFilteredCountAsync(from, to, employeeId, departmentId, status);
 
-            if (from.HasValue) query = query.Where(a => a.Date >= from.Value);
-            if (to.HasValue) query = query.Where(a => a.Date <= to.Value);
-            if (!string.IsNullOrEmpty(employeeId)) query = query.Where(a => a.EmployeeId == employeeId);
-            if (!string.IsNullOrEmpty(departmentId)) query = query.Where(a => a.Employee!.DepartmentId == departmentId);
-            if (status.HasValue) query = query.Where(a => a.Status == status.Value);
+            var attendances = await _unitOfWork.AttendanceLogs.GetFilteredAsync(
+                from, to, employeeId, departmentId, status, page, pageSize);
 
-            var total = await query.CountAsync();
-
-            var attendances = await query
-                .OrderByDescending(a => a.Date)
-                .Skip((page - 1) * pageSize)
-                .Take(pageSize)
-                .Select(a => new AttendanceListDto
-                {
-                    Id = a.Id,
-                    EmployeeId = a.EmployeeId,
-                    EmployeeName = a.Employee!.Name,
-                    Department = a.Employee.Department != null ? a.Employee.Department.Name : null,
-                    College = a.Employee.College != null ? a.Employee.College.Name : null,
-                    Date = a.Date,
-                    CheckIn = a.CheckIn,
-                    CheckOut = a.CheckOut,
-                    Status = a.Status,
-                    Latitude = a.Latitude,
-                    Longitude = a.Longitude,
-                    DistanceFromCampus = a.DistanceFromCampus,
-                    ResolutionMethod = a.ResolutionMethod
-                })
-                .ToListAsync();
+            var result = attendances.Select(a => new AttendanceListDto
+            {
+                Id = a.Id,
+                EmployeeId = a.EmployeeId,
+                EmployeeName = a.Employee?.Name ?? string.Empty,
+                Department = a.Employee?.Department?.Name,
+                College = a.Employee?.College?.Name,
+                Date = a.Date,
+                CheckIn = a.CheckIn,
+                CheckOut = a.CheckOut,
+                Status = a.Status,
+                Latitude = a.Latitude,
+                Longitude = a.Longitude,
+                DistanceFromCampus = a.DistanceFromCampus,
+                ResolutionMethod = a.ResolutionMethod
+            });
 
             return Ok(new
             {
                 success = true,
-                data = attendances,
+                data = result,
                 pagination = new { page, pageSize, total, totalPages = (int)Math.Ceiling((double)total / pageSize) }
             });
         }
@@ -88,52 +76,48 @@ namespace Attendance_System.Controllers
             if (string.IsNullOrEmpty(employeeId))
                 return Unauthorized(new { success = false, message = "No employee linked to this account" });
 
-            var attendances = await _unitOfWork.AttendanceLogs.Query()
-                .Where(a => a.EmployeeId == employeeId)
-                .OrderByDescending(a => a.Date)
-                .Select(a => new AttendanceDto
-                {
-                    Id = a.Id,
-                    EmployeeId = a.EmployeeId,
-                    EmployeeName = a.Employee!.Name,
-                    Date = a.Date,
-                    CheckIn = a.CheckIn,
-                    CheckOut = a.CheckOut,
-                    Status = a.Status,
-                    Latitude = a.Latitude,
-                    Longitude = a.Longitude,
-                    DistanceFromCampus = a.DistanceFromCampus,
-                    ResolutionMethod = a.ResolutionMethod
-                })
-                .ToListAsync();
+            var attendances = await _unitOfWork.AttendanceLogs.GetByEmployeeIdWithDetailsAsync(employeeId);
 
-            return Ok(new { success = true, data = attendances });
+            var result = attendances.Select(a => new AttendanceDto
+            {
+                Id = a.Id,
+                EmployeeId = a.EmployeeId,
+                EmployeeName = a.Employee?.Name ?? string.Empty,
+                Date = a.Date,
+                CheckIn = a.CheckIn,
+                CheckOut = a.CheckOut,
+                Status = a.Status,
+                Latitude = a.Latitude,
+                Longitude = a.Longitude,
+                DistanceFromCampus = a.DistanceFromCampus,
+                ResolutionMethod = a.ResolutionMethod
+            });
+
+            return Ok(new { success = true, data = result });
         }
 
         [HttpGet("employee/{employeeId}")]
         [AuthorizedRoles(UserRole.Admin, UserRole.Hr, UserRole.Head)]
         public async Task<IActionResult> GetByEmployee(string employeeId)
         {
-            var attendances = await _unitOfWork.AttendanceLogs.Query()
-                .Where(a => a.EmployeeId == employeeId)
-                .OrderByDescending(a => a.Date)
-                .Select(a => new AttendanceDto
-                {
-                    Id = a.Id,
-                    EmployeeId = a.EmployeeId,
-                    EmployeeName = a.Employee!.Name,
-                    Date = a.Date,
-                    CheckIn = a.CheckIn,
-                    CheckOut = a.CheckOut,
-                    Status = a.Status,
-                    Latitude = a.Latitude,
-                    Longitude = a.Longitude,
-                    DistanceFromCampus = a.DistanceFromCampus,
-                    ResolutionMethod = a.ResolutionMethod
-                })
-                .ToListAsync();
+            var attendances = await _unitOfWork.AttendanceLogs.GetByEmployeeIdWithDetailsAsync(employeeId);
 
-            return Ok(new { success = true, data = attendances });
+            var result = attendances.Select(a => new AttendanceDto
+            {
+                Id = a.Id,
+                EmployeeId = a.EmployeeId,
+                EmployeeName = a.Employee?.Name ?? string.Empty,
+                Date = a.Date,
+                CheckIn = a.CheckIn,
+                CheckOut = a.CheckOut,
+                Status = a.Status,
+                Latitude = a.Latitude,
+                Longitude = a.Longitude,
+                DistanceFromCampus = a.DistanceFromCampus,
+                ResolutionMethod = a.ResolutionMethod
+            });
+
+            return Ok(new { success = true, data = result });
         }
 
         [HttpGet("today")]
@@ -141,28 +125,25 @@ namespace Attendance_System.Controllers
         public async Task<IActionResult> GetTodayAttendance()
         {
             var today = DateOnly.FromDateTime(DateTime.Today);
-            var totalEmployees = await _unitOfWork.Employees.Query()
-                .CountAsync(e => e.Status == "active" && e.DeletedAt == null);
+            var totalEmployees = await _unitOfWork.Employees.GetActiveEmployeesCountAsync();
 
-            var attendances = await _unitOfWork.AttendanceLogs.Query()
-                .Include(a => a.Employee).ThenInclude(e => e!.Department)
-                .Where(a => a.Date == today)
-                .Select(a => new AttendanceDto
-                {
-                    Id = a.Id,
-                    EmployeeId = a.EmployeeId,
-                    EmployeeName = a.Employee!.Name,
-                    Department = a.Employee.Department != null ? a.Employee.Department.Name : null,
-                    Date = a.Date,
-                    CheckIn = a.CheckIn,
-                    CheckOut = a.CheckOut,
-                    Status = a.Status,
-                    Latitude = a.Latitude,
-                    Longitude = a.Longitude,
-                    DistanceFromCampus = a.DistanceFromCampus,
-                    ResolutionMethod = a.ResolutionMethod
-                })
-                .ToListAsync();
+            var attendances = await _unitOfWork.AttendanceLogs.GetByDateRangeWithDetailsAsync(today, today);
+
+            var result = attendances.Select(a => new AttendanceDto
+            {
+                Id = a.Id,
+                EmployeeId = a.EmployeeId,
+                EmployeeName = a.Employee?.Name ?? string.Empty,
+                Department = a.Employee?.Department?.Name,
+                Date = a.Date,
+                CheckIn = a.CheckIn,
+                CheckOut = a.CheckOut,
+                Status = a.Status,
+                Latitude = a.Latitude,
+                Longitude = a.Longitude,
+                DistanceFromCampus = a.DistanceFromCampus,
+                ResolutionMethod = a.ResolutionMethod
+            }).ToList();
 
             return Ok(new
             {
@@ -171,9 +152,9 @@ namespace Attendance_System.Controllers
                 {
                     Date = today,
                     TotalEmployees = totalEmployees,
-                    CheckedIn = attendances.Count(a => a.CheckIn != null),
-                    CheckedOut = attendances.Count(a => a.CheckOut != null),
-                    Details = attendances
+                    CheckedIn = result.Count(a => a.CheckIn != null),
+                    CheckedOut = result.Count(a => a.CheckOut != null),
+                    Details = result
                 }
             });
         }
@@ -186,8 +167,7 @@ namespace Attendance_System.Controllers
             if (string.IsNullOrEmpty(employeeId))
                 return Unauthorized(new { success = false, message = "No employee linked to this account" });
 
-            var employee = await _unitOfWork.Employees.Query()
-                .FirstOrDefaultAsync(e => e.Id == employeeId && e.DeletedAt == null);
+            var employee = await _unitOfWork.Employees.GetEmployeeWithDepartmentAndCollegeAsync(employeeId);
             if (employee == null || employee.Status != "active")
                 return BadRequest(new { success = false, message = "Employee not found or inactive" });
 
@@ -210,8 +190,7 @@ namespace Attendance_System.Controllers
                 });
 
             var today = DateOnly.FromDateTime(DateTime.Today);
-            var existing = await _unitOfWork.AttendanceLogs.Query()
-                .FirstOrDefaultAsync(a => a.EmployeeId == employeeId && a.Date == today);
+            var existing = await _unitOfWork.AttendanceLogs.GetByEmployeeAndDateAsync(employeeId, today);
             if (existing != null)
                 return BadRequest(new { success = false, message = "Already checked in today" });
 
@@ -256,8 +235,7 @@ namespace Attendance_System.Controllers
             var employeeId = GetCurrentEmployeeId();
             var role = User.FindFirst(ClaimTypes.Role)?.Value;
 
-            var attendance = await _unitOfWork.AttendanceLogs.Query()
-                .FirstOrDefaultAsync(a => a.Id == id);
+            var attendance = await _unitOfWork.AttendanceLogs.GetByIdWithEmployeeAsync(id);
             if (attendance == null || attendance.CheckOut != null)
                 return BadRequest(new { success = false, message = "Record not found or already checked out" });
 
@@ -313,20 +291,13 @@ namespace Attendance_System.Controllers
 
         private async Task<WorkSchedule?> GetWorkSchedule(string employeeId)
         {
-            var assignment = await _unitOfWork.ScheduleAssignments.Query()
-                .Include(sa => sa.Schedule)
-                .FirstOrDefaultAsync(sa => sa.EmployeeId == employeeId);
-
+            var assignment = await _unitOfWork.ScheduleAssignments.GetByEmployeeIdWithScheduleAsync(employeeId);
             if (assignment?.Schedule != null) return assignment.Schedule;
 
-            var employee = await _unitOfWork.Employees.Query()
-                .FirstOrDefaultAsync(e => e.Id == employeeId && e.DeletedAt == null);
-            if (employee?.DepartmentId == null) return null;
+            var departmentId = await _unitOfWork.Employees.GetDepartmentIdByEmployeeIdAsync(employeeId);
+            if (departmentId == null) return null;
 
-            var deptAssignment = await _unitOfWork.ScheduleAssignments.Query()
-                .Include(sa => sa.Schedule)
-                .FirstOrDefaultAsync(sa => sa.DepartmentId == employee.DepartmentId);
-
+            var deptAssignment = await _unitOfWork.ScheduleAssignments.GetByDepartmentIdWithScheduleAsync(departmentId);
             return deptAssignment?.Schedule;
         }
     }

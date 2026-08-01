@@ -1,5 +1,4 @@
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using Attendance_System.Models;
 using Attendance_System.Enums;
 using Attendance_System.Middleware;
@@ -33,8 +32,8 @@ namespace Attendance_System.Controllers
         [AuthorizedRoles(UserRole.Admin, UserRole.Hr)]
         public async Task<IActionResult> GetAll()
         {
-            var stored = await _unitOfWork.SystemSettings.Query()
-                .ToDictionaryAsync(s => s.Key, s => s.Value);
+            var allSettings = await _unitOfWork.SystemSettings.GetAllAsync();
+            var stored = allSettings.ToDictionary(s => s.Key, s => s.Value);
 
             var merged = Defaults.ToDictionary(kv => kv.Key, kv => stored.TryGetValue(kv.Key, out var v) ? v : kv.Value);
 
@@ -48,10 +47,9 @@ namespace Attendance_System.Controllers
         [AuthorizedRoles(UserRole.Admin, UserRole.Hr)]
         public async Task<IActionResult> GetByKey(string key)
         {
-            var stored = await _unitOfWork.SystemSettings.Query()
-                .FirstOrDefaultAsync(s => s.Key == key);
+            var setting = await _unitOfWork.SystemSettings.GetByIdAsync(key);
 
-            var value = stored?.Value ?? (Defaults.TryGetValue(key, out var d) ? d : null);
+            var value = setting?.Value ?? (Defaults.TryGetValue(key, out var d) ? d : null);
             if (value == null)
                 return NotFound(new { success = false, message = "Setting not found" });
 
@@ -69,8 +67,7 @@ namespace Attendance_System.Controllers
             if (string.IsNullOrWhiteSpace(dto.Value))
                 return BadRequest(new { success = false, message = "Value is required" });
 
-            var setting = await _unitOfWork.SystemSettings.Query()
-                .FirstOrDefaultAsync(s => s.Key == key);
+            var setting = await _unitOfWork.SystemSettings.GetByIdAsync(key);
 
             if (setting == null)
             {

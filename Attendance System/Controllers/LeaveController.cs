@@ -1,5 +1,4 @@
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 using Attendance_System.Models;
 using Attendance_System.Enums;
@@ -32,21 +31,51 @@ namespace Attendance_System.Controllers
             [FromQuery] int page = 1,
             [FromQuery] int pageSize = 20)
         {
-            var query = _unitOfWork.LeaveRequests.Query()
-                .Include(l => l.Employee).ThenInclude(e => e!.Department)
-                .Include(l => l.LeaveType)
-                .Include(l => l.Manager)
-                .AsQueryable();
+            IEnumerable<LeaveRequest> requests;
 
-            if (status.HasValue) query = query.Where(l => l.Status == status.Value);
-            if (!string.IsNullOrEmpty(departmentId))
-                query = query.Where(l => l.Employee!.DepartmentId == departmentId);
-            if (!string.IsNullOrEmpty(employeeId))
-                query = query.Where(l => l.EmployeeId == employeeId);
+            if (departmentId != null)
+            {
+                requests = await _unitOfWork.LeaveRequests.GetPendingByDepartmentWithDetailsAsync(departmentId);
+            }
+            else if (employeeId != null)
+            {
+                var empRequests = await _unitOfWork.LeaveRequests.GetByEmployeeIdWithDetailsAsync(employeeId);
+                requests = empRequests;
+            }
+            else
+            {
+                // Admin/HR get all
+                var allRequests = await _unitOfWork.LeaveRequests.GetAllAsync();
+                requests = allRequests
+                    .Where(l => l.Employee != null && l.Employee.DeletedAt == null)
+                    .Select(l => new LeaveRequest
+                    {
+                        Id = l.Id,
+                        EmployeeId = l.EmployeeId,
+                        Employee = l.Employee,
+                        LeaveTypeId = l.LeaveTypeId,
+                        LeaveType = l.LeaveType,
+                        FromDate = l.FromDate,
+                        ToDate = l.ToDate,
+                        DaysCount = l.DaysCount,
+                        Reason = l.Reason,
+                        Status = l.Status,
+                        RejectionNote = l.RejectionNote,
+                        ManagerId = l.ManagerId,
+                        Manager = l.Manager,
+                        GrantedByAdmin = l.GrantedByAdmin,
+                        MaternityMode = l.MaternityMode,
+                        CreatedAt = l.CreatedAt,
+                        UpdatedAt = l.UpdatedAt
+                    });
+            }
 
-            var total = await query.CountAsync();
+            if (status.HasValue)
+                requests = requests.Where(l => l.Status == status.Value);
 
-            var requests = await query
+            var total = requests.Count();
+
+            var result = requests
                 .OrderByDescending(l => l.CreatedAt)
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
@@ -54,26 +83,26 @@ namespace Attendance_System.Controllers
                 {
                     Id = l.Id,
                     EmployeeId = l.EmployeeId,
-                    EmployeeName = l.Employee!.Name,
-                    Department = l.Employee.Department != null ? l.Employee.Department.Name : null,
-                    LeaveType = l.LeaveType!.Name,
+                    EmployeeName = l.Employee?.Name ?? string.Empty,
+                    Department = l.Employee?.Department?.Name,
+                    LeaveType = l.LeaveType?.Name ?? string.Empty,
                     FromDate = l.FromDate,
                     ToDate = l.ToDate,
                     DaysCount = l.DaysCount,
                     Reason = l.Reason,
                     Status = l.Status,
                     CreatedAt = l.CreatedAt,
-                    Manager = l.Manager != null ? l.Manager.Name : null,
+                    Manager = l.Manager?.Name,
                     RejectionNote = l.RejectionNote,
                     GrantedByAdmin = l.GrantedByAdmin,
                     MaternityMode = l.MaternityMode
                 })
-                .ToListAsync();
+                .ToList();
 
             return Ok(new
             {
                 success = true,
-                data = requests,
+                data = result,
                 pagination = new
                 {
                     page,
@@ -92,25 +121,22 @@ namespace Attendance_System.Controllers
             if (string.IsNullOrEmpty(employeeId))
                 return Unauthorized(new { success = false, message = "No employee linked to this account" });
 
-            var requests = await _unitOfWork.LeaveRequests.Query()
-                .Include(l => l.LeaveType)
-                .Where(l => l.EmployeeId == employeeId)
-                .OrderByDescending(l => l.CreatedAt)
-                .Select(l => new MyLeaveRequestDto
-                {
-                    Id = l.Id,
-                    LeaveType = l.LeaveType!.Name,
-                    FromDate = l.FromDate,
-                    ToDate = l.ToDate,
-                    DaysCount = l.DaysCount,
-                    Reason = l.Reason,
-                    Status = l.Status,
-                    CreatedAt = l.CreatedAt,
-                    RejectionNote = l.RejectionNote
-                })
-                .ToListAsync();
+            var requests = await _unitOfWork.LeaveRequests.GetByEmployeeIdWithDetailsAsync(employeeId);
 
-            return Ok(new { success = true, data = requests });
+            var result = requests.Select(l => new MyLeaveRequestDto
+            {
+                Id = l.Id,
+                LeaveType = l.LeaveType?.Name ?? string.Empty,
+                FromDate = l.FromDate,
+                ToDate = l.ToDate,
+                DaysCount = l.DaysCount,
+                Reason = l.Reason,
+                Status = l.Status,
+                CreatedAt = l.CreatedAt,
+                RejectionNote = l.RejectionNote
+            });
+
+            return Ok(new { success = true, data = result });
         }
 
         [HttpPost("requests")]
@@ -121,13 +147,11 @@ namespace Attendance_System.Controllers
             if (string.IsNullOrEmpty(employeeId))
                 return Unauthorized(new { success = false, message = "No employee linked to this account" });
 
-            var employee = await _unitOfWork.Employees.Query()
-                .FirstOrDefaultAsync(e => e.Id == employeeId && e.DeletedAt == null);
+            var employee = await _unitOfWork.Employees.GetEmployeeWithDepartmentAndCollegeAsync(employeeId);
             if (employee == null)
                 return BadRequest(new { success = false, message = "Employee not found" });
 
-            var leaveType = await _unitOfWork.LeaveTypes.Query()
-                .FirstOrDefaultAsync(lt => lt.Id == dto.LeaveTypeId);
+            var leaveType = await _unitOfWork.LeaveTypes.GetByIdAsync(dto.LeaveTypeId);
             if (leaveType == null)
                 return BadRequest(new { success = false, message = "Invalid leave type" });
 
@@ -162,21 +186,19 @@ namespace Attendance_System.Controllers
                 if (dto.FromDate < weekStart || dto.FromDate > weekEnd)
                     return BadRequest(new { success = false, message = "Compensatory leave must be in the same week as the worked day" });
 
-                var workedSaturday = await _unitOfWork.AttendanceLogs.Query()
-                    .AnyAsync(a =>
-                        a.EmployeeId == employeeId &&
-                        a.Date >= weekStart && a.Date <= weekEnd &&
-                        a.Date.DayOfWeek == DayOfWeek.Saturday &&
-                        (a.Status == AttendanceStatus.Present || a.Status == AttendanceStatus.Late || a.Status == AttendanceStatus.Left));
+                var attendances = await _unitOfWork.AttendanceLogs.GetByEmployeeIdAsync(employeeId);
+                var workedSaturday = attendances.Any(a =>
+                    a.Date >= weekStart && a.Date <= weekEnd &&
+                    a.Date.DayOfWeek == DayOfWeek.Saturday &&
+                    (a.Status == AttendanceStatus.Present || a.Status == AttendanceStatus.Late || a.Status == AttendanceStatus.Left));
                 if (!workedSaturday)
                     return BadRequest(new { success = false, message = "No Saturday attendance record found for this week" });
 
-                var hasCompensatory = await _unitOfWork.LeaveRequests.Query()
-                    .AnyAsync(l =>
-                        l.EmployeeId == employeeId &&
-                        l.LeaveTypeId == "compensatory" &&
-                        l.Status != LeaveStatus.Rejected &&
-                        l.FromDate >= weekStart && l.FromDate <= weekEnd);
+                var leaveRequests = await _unitOfWork.LeaveRequests.GetByEmployeeIdAsync(employeeId);
+                var hasCompensatory = leaveRequests.Any(l =>
+                    l.LeaveTypeId == "compensatory" &&
+                    l.Status != LeaveStatus.Rejected &&
+                    l.FromDate >= weekStart && l.FromDate <= weekEnd);
                 if (hasCompensatory)
                     return BadRequest(new { success = false, message = "You already have a compensatory leave this week" });
             }
@@ -195,10 +217,8 @@ namespace Attendance_System.Controllers
             if (leaveType.MaxAnnualDays > 0)
             {
                 var (lyStart, lyEnd) = LeaveYearPeriod(today);
-                var used = await _unitOfWork.LeaveRequests.Query()
-                    .Where(l => l.EmployeeId == employeeId && l.LeaveTypeId == dto.LeaveTypeId
-                                && l.Status == LeaveStatus.Approved && l.FromDate >= lyStart && l.FromDate <= lyEnd)
-                    .SumAsync(l => (int?)l.DaysCount) ?? 0;
+                var used = await _unitOfWork.LeaveRequests.GetApprovedLeaveDaysByEmployeeAndTypeAsync(
+                    employeeId, dto.LeaveTypeId, lyStart, lyEnd);
 
                 if (used + daysCount > leaveType.MaxAnnualDays)
                     return BadRequest(new
@@ -238,10 +258,7 @@ namespace Attendance_System.Controllers
         [AuthorizedRoles(UserRole.Admin, UserRole.Hr, UserRole.Head)]
         public async Task<IActionResult> ApproveLeaveRequest(string id, [FromBody] ApproveLeaveDto dto)
         {
-            var request = await _unitOfWork.LeaveRequests.Query()
-                .Include(l => l.Employee)
-                .Include(l => l.LeaveType)
-                .FirstOrDefaultAsync(l => l.Id == id);
+            var request = await _unitOfWork.LeaveRequests.GetLeaveRequestWithDetailsAsync(id);
 
             if (request == null)
                 return NotFound(new { success = false, message = "Request not found" });
@@ -255,11 +272,8 @@ namespace Attendance_System.Controllers
             var role = User.FindFirst(ClaimTypes.Role)?.Value;
             if (role == "Head")
             {
-                var headDeptId = await _unitOfWork.Employees.Query()
-                    .Where(e => e.Id == approverId)
-                    .Select(e => e.DepartmentId)
-                    .FirstOrDefaultAsync();
-                if (request.Employee!.DepartmentId != headDeptId)
+                var headDeptId = await _unitOfWork.Employees.GetDepartmentIdByEmployeeIdAsync(approverId);
+                if (request.Employee?.DepartmentId != headDeptId)
                     return StatusCode(403, new { success = false, message = "You can only review requests from your own department" });
             }
 

@@ -9,5 +9,13 @@ namespace Attendance_System.Repositories.Interfaces
         Task<Employee?> GetByEmailAsync(string email);
         Task<IEnumerable<Employee>> GetByDepartmentIdAsync(string departmentId);
         Task<IEnumerable<Employee>> GetByCollegeIdAsync(string collegeId);
+
+        Task<Employee?> GetEmployeeWithDepartmentAndCollegeAsync(string employeeId);
+        Task<Employee?> GetEmployeeWithUserAsync(string employeeId);
+        Task<Employee?> GetEmployeeWithDepartmentAndUserAsync(string employeeId);
+        Task<IEnumerable<Employee>> GetActiveEmployeesByDepartmentAsync(string departmentId);
+        Task<int> GetActiveEmployeesCountAsync();
+        Task<int> GetActiveEmployeesCountByDepartmentAsync(string departmentId);
+        Task<string?> GetDepartmentIdByEmployeeIdAsync(string employeeId);
     }
 }

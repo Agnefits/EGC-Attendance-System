@@ -23,5 +23,41 @@ namespace Attendance_System.Repositories.Classes
         {
             return await _dbSet.Where(d => d.CollegeId == collegeId).ToListAsync();
         }
+
+        public async Task<Department?> GetDepartmentWithCollegeAsync(string departmentId)
+        {
+            return await _dbSet
+                .Include(d => d.College)
+                .FirstOrDefaultAsync(d => d.Id == departmentId && d.DeletedAt == null);
+        }
+
+        public async Task<IEnumerable<Department>> GetActiveDepartmentsAsync()
+        {
+            return await _dbSet
+                .Where(d => d.DeletedAt == null)
+                .OrderBy(d => d.Name)
+                .ToListAsync();
+        }
+
+        public async Task<IEnumerable<Department>> GetActiveDepartmentsByCollegeAsync(string collegeId)
+        {
+            return await _dbSet
+                .Where(d => d.CollegeId == collegeId && d.DeletedAt == null)
+                .OrderBy(d => d.Name)
+                .ToListAsync();
+        }
+
+        public async Task<bool> HasActiveEmployeesAsync(string departmentId)
+        {
+            return await _dbSet
+                .Where(d => d.Id == departmentId && d.DeletedAt == null)
+                .SelectMany(d => d.Employees)
+                .AnyAsync(e => e.DeletedAt == null);
+        }
+
+        public async Task<bool> HasSubDepartmentsAsync(string departmentId)
+        {
+            return await _dbSet.AnyAsync(d => d.ParentId == departmentId && d.DeletedAt == null);
+        }
     }
 }
