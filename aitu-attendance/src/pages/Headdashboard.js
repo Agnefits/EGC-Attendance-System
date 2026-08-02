@@ -1,6 +1,6 @@
 import useNotifications from './useNotifications';
-import React, { useState } from 'react';
-import { EMPLOYEES, ATTENDANCE, DEPARTMENTS, COLLEGES, LEAVES } from '../data';
+import React, { useState, useEffect, useCallback } from 'react';
+import { attendanceService, employeesService, leavesService, permissionsService } from '../services';
 
 const STATUS_META = {
   present: { label:{ar:'حاضر', en:'Present'}, color:'#14532D', bg:'#DCFCE7', border:'#BBF7D0' },
@@ -45,28 +45,76 @@ function Modal({ open, onClose, title, children, lang }) {
 export default function HeadDashboard({ lang, user, setActivePage }) {
   const dir      = lang==='ar'?'rtl':'ltr';
   const { notifs: NOTIFS, unread: notifUnread } = useNotifications({ user, lang });
-  const dept     = DEPARTMENTS.find(d=>d.id===user.departmentId);
-  const col      = COLLEGES.find(c=>c.id===dept?.collegeId);
-  const deptEmps = EMPLOYEES.filter(e=>e.departmentId===user.departmentId);
-  const empIds   = deptEmps.map(e=>e.id);
 
-  const deptAtt     = ATTENDANCE.filter(a=>empIds.includes(a.employeeId));
+  const [employees,  setEmployees]  = useState([]);
+  const [attendance,  setAttendance] = useState([]);
+  const [leavesList,  setLeavesList] = useState([]);
+  const [permsList,   setPermsList]  = useState([]);
+  const [loading,     setLoading]    = useState(true);
+
+  // Normalize backend field names (leaveTypeId/fromDate/toDate/daysCount) to
+  // what this component reads (type/from/to/days).
+  const normalizeLeave = (l) => ({
+    ...l,
+    employeeId: l.employeeId ?? l.EmployeeId ?? '',
+    type: l.leaveTypeId ?? l.LeaveTypeId ?? l.type ?? '',
+    from: l.fromDate ?? l.FromDate ?? l.from ?? '',
+    to: l.toDate ?? l.ToDate ?? l.to ?? '',
+    days: l.daysCount ?? l.DaysCount ?? l.days ?? 0,
+    status: String(l.status ?? l.Status ?? 'pending').toLowerCase(),
+  });
+
+  // Normalize backend field names (permissionType/durationMinutes) to what
+  // this component reads (type/duration).
+  const normalizePermission = (p) => ({
+    ...p,
+    employeeId: p.employeeId ?? p.EmployeeId ?? '',
+    type: p.permissionType ?? p.PermissionType ?? p.type ?? '',
+    duration: p.durationMinutes ?? p.DurationMinutes ?? p.duration ?? 0,
+    status: String(p.status ?? p.Status ?? 'pending').toLowerCase(),
+  });
+
+  const loadData = useCallback(async () => {
+    try {
+      setLoading(true);
+      // Employees list is already scoped to this Head's own department by
+      // the backend (GET /api/Employees auto-restricts Head accounts).
+      const [empData, attData, leaveData, permData] = await Promise.all([
+        employeesService.getEmployees().catch(() => []),
+        attendanceService.getAttendanceLogs().catch(() => []),
+        leavesService.getLeaves().catch(() => []),
+        permissionsService.getPermissions().catch(() => []),
+      ]);
+      setEmployees(Array.isArray(empData) ? empData : []);
+      setAttendance(Array.isArray(attData) ? attData : []);
+      setLeavesList(Array.isArray(leaveData) ? leaveData.map(normalizeLeave) : []);
+      setPermsList(Array.isArray(permData) ? permData.map(normalizePermission) : []);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => { loadData(); }, [loadData]);
+
+  const deptEmps = employees; // already department-scoped by the backend
+  const empIds   = deptEmps.map(e => e.id);
+  const dept     = { name: deptEmps[0]?.department, nameEn: deptEmps[0]?.department };
+  const col      = { name: deptEmps[0]?.college, nameEn: deptEmps[0]?.college };
+
+  const deptAtt     = attendance.filter(a=>empIds.includes(a.employeeId));
   const present     = deptAtt.filter(a=>a.status==='present'||a.status==='left').length;
   const absent      = deptAtt.filter(a=>a.status==='absent').length;
   const late        = deptAtt.filter(a=>a.status==='late').length;
   const attPct      = deptAtt.length?Math.round(present/deptAtt.length*100):0;
   const barColor    = p=>p>=80?'#16A34A':p>=60?'#D97706':'#DC2626';
 
-  const deptLeaves    = LEAVES.filter(l=>empIds.includes(l.employeeId));
+  const deptLeaves    = leavesList.filter(l=>empIds.includes(l.employeeId));
   const pendingLeaves = deptLeaves.filter(l=>l.status==='pending');
 
-  const [permissions] = useState([
-    { id:'P1', employeeId:empIds[0],              type:'morning',     duration:60, date:'2026-05-22', reason:'موعد طبي',    status:'pending'  },
-    { id:'P2', employeeId:empIds[1]||empIds[0],   type:'evening',     duration:90, date:'2026-05-23', reason:'ظرف عائلي',  status:'pending'  },
-    { id:'P3', employeeId:empIds[0],              type:'exceptional', duration:45, date:'2026-05-21', reason:'طارئ',        status:'approved' },
-    { id:'P4', employeeId:empIds[2]||empIds[0],   type:'morning',     duration:60, date:'2026-05-24', reason:'معاملة رسمية',status:'pending'  },
-  ].filter(p=>p.employeeId));
-
+  const permissions   = permsList.filter(p=>empIds.includes(p.employeeId));
   const pendingPerms = permissions.filter(p=>p.status==='pending');
 
   const [modal, setModal] = useState(null); // 'att' | 'leaves' | 'perms' | 'leaveBalance' | 'permBalance'
@@ -92,6 +140,14 @@ export default function HeadDashboard({ lang, user, setActivePage }) {
           {note&&<div style={{fontSize:'11px',color:'#94A3B8',marginTop:'2px'}}>{note}</div>}
         </div>
         {onClick&&<div style={{marginRight:'auto',marginLeft:'auto',color:'#94A3B8',fontSize:'12px',fontWeight:'600',display:'flex',alignItems:'center',gap:'3px'}}>{lang==='ar'?'عرض':'View'} →</div>}
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div style={{padding:'40px',textAlign:'center',fontFamily:'Cairo,sans-serif',color:'#94A3B8'}}>
+        {lang==='ar'?'جاري تحميل البيانات...':'Loading...'}
       </div>
     );
   }
@@ -276,7 +332,7 @@ export default function HeadDashboard({ lang, user, setActivePage }) {
         </div>
         <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(220px,1fr))',gap:'10px'}}>
           {deptEmps.slice(0,6).map(emp=>{
-            const empLeaves=LEAVES.filter(l=>l.employeeId===emp.id&&l.status==='approved');
+            const empLeaves=deptLeaves.filter(l=>l.employeeId===emp.id&&l.status==='approved');
             return(
               <div key={emp.id} style={{background:'#F8FAFC',borderRadius:'12px',padding:'12px 14px',border:'1px solid #E8EDF5',display:'flex',alignItems:'center',gap:'10px',transition:'all .18s'}}
                 onMouseEnter={e=>{e.currentTarget.style.background='#EFF6FF';e.currentTarget.style.borderColor='#BFDBFE';}}
@@ -336,7 +392,7 @@ export default function HeadDashboard({ lang, user, setActivePage }) {
             </tr></thead>
             <tbody>
               {permissions.slice(0,4).map((p,idx)=>{
-                const emp=EMPLOYEES.find(e=>e.id===p.employeeId);
+                const emp=deptEmps.find(e=>e.id===p.employeeId);
                 const pt=PERM_TYPES[p.type];
                 const sm={pending:{l:{ar:'معلق',en:'Pending'},c:'#B45309',bg:'#FEF3C7',b:'#FDE68A'},approved:{l:{ar:'موافق',en:'Approved'},c:'#14532D',bg:'#DCFCE7',b:'#BBF7D0'},rejected:{l:{ar:'مرفوض',en:'Rejected'},c:'#991B1B',bg:'#FEE2E2',b:'#FECACA'}}[p.status];
                 return(
@@ -373,7 +429,7 @@ export default function HeadDashboard({ lang, user, setActivePage }) {
                 <div style={{fontSize:'32px',marginBottom:'8px'}}>📋</div>{lang==='ar'?'لا سجلات':'No records'}
               </td></tr>
             ):deptAtt.map((a,idx)=>{
-              const emp=EMPLOYEES.find(e=>e.id===a.employeeId);
+              const emp=deptEmps.find(e=>e.id===a.employeeId);
               const sm=STATUS_META[a.status];
               return(
                 <tr key={a.id} style={{background:idx%2===0?'white':'#FAFBFC'}}
@@ -394,7 +450,7 @@ export default function HeadDashboard({ lang, user, setActivePage }) {
       <Modal open={modal==='leaveBalance'} onClose={()=>setModal(null)} title={`📅 ${lang==='ar'?'رصيد إجازات الموظفين':'Employee Leave Balances'}`} lang={lang}>
         <div style={{display:'flex',flexDirection:'column',gap:'10px'}}>
           {deptEmps.map(emp=>{
-            const empLeaves=LEAVES.filter(l=>l.employeeId===emp.id&&l.status==='approved');
+            const empLeaves=deptLeaves.filter(l=>l.employeeId===emp.id&&l.status==='approved');
             return(
               <div key={emp.id} style={{background:'#F8FAFC',borderRadius:'14px',padding:'14px 16px',border:'1px solid #E8EDF5',display:'flex',alignItems:'center',gap:'14px'}}>
                 <div style={{width:'40px',height:'40px',borderRadius:'12px',background:'linear-gradient(135deg,#1565C0,#1E88E5)',display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontSize:'16px',fontWeight:'900',flexShrink:0}}>
@@ -486,7 +542,7 @@ export default function HeadDashboard({ lang, user, setActivePage }) {
           </tr></thead>
           <tbody>
             {permissions.map((p,idx)=>{
-              const emp=EMPLOYEES.find(e=>e.id===p.employeeId);
+              const emp=deptEmps.find(e=>e.id===p.employeeId);
               const pt=PERM_TYPES[p.type];
               const sm={pending:{l:{ar:'معلق',en:'Pending'},c:'#B45309',bg:'#FEF3C7',b:'#FDE68A'},approved:{l:{ar:'موافق',en:'Approved'},c:'#14532D',bg:'#DCFCE7',b:'#BBF7D0'},rejected:{l:{ar:'مرفوض',en:'Rejected'},c:'#991B1B',bg:'#FEE2E2',b:'#FECACA'}}[p.status];
               return(
