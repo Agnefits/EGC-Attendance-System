@@ -245,9 +245,9 @@ export default function EmployeeDashboard({lang,user,setActivePage}){
         employeesService.getEmployees().catch(() => []),
         structureService.getDepartments().catch(() => []),
         structureService.getColleges().catch(() => []),
-        attendanceService.getAttendanceLogs().catch(() => []),
-        leavesService.getLeaves().catch(() => []),
-        permissionsService.getPermissions().catch(() => [])
+        attendanceService.getMyAttendance().catch(() => []),
+        leavesService.getMyLeaves().catch(() => []),
+        permissionsService.getMyPermissions().catch(() => [])
       ]);
       setEmployees(Array.isArray(empData) ? empData : []);
       setDepartments(Array.isArray(deptData) ? deptData : []);

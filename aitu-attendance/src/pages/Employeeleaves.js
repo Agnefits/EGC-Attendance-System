@@ -27,6 +27,20 @@ function EmployeeLeaves({ lang, user }) {
   const [attendance, setAttendance] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  // Normalize backend field names to what this component reads.
+  function normalizeLeave(l) {
+    return {
+      ...l,
+      id: l.id ?? l.Id ?? '',
+      type: l.leaveTypeId ?? l.LeaveTypeId ?? l.type ?? '',
+      from: l.from ?? l.fromDate ?? l.FromDate ?? '',
+      to: l.to ?? l.toDate ?? l.ToDate ?? '',
+      days: l.days ?? l.daysCount ?? l.DaysCount ?? 0,
+      status: String(l.status ?? l.Status ?? 'pending').toLowerCase(),
+      reason: l.reason ?? l.Reason ?? '',
+    };
+  }
+
   const loadData = useCallback(async () => {
     try {
       setLoading(true);
@@ -34,9 +48,9 @@ function EmployeeLeaves({ lang, user }) {
         leavesService.getMyLeaves().catch(() => []),
         employeesService.getEmployees().catch(() => []),
         structureService.getDepartments().catch(() => []),
-        attendanceService.getAttendanceLogs().catch(() => [])
+        attendanceService.getMyAttendance().catch(() => [])
       ]);
-      setRequests(Array.isArray(myLeaveData) ? myLeaveData : []);
+      setRequests(Array.isArray(myLeaveData) ? myLeaveData.map(normalizeLeave) : []);
       setEmployees(Array.isArray(empData) ? empData : []);
       setDepartments(Array.isArray(deptData) ? deptData : []);
       setAttendance(Array.isArray(attData) ? attData : []);
@@ -135,9 +149,9 @@ function EmployeeLeaves({ lang, user }) {
       if (!dates) return;
       try {
         await leavesService.submitLeaveRequest({
-          type: 'maternity',
-          from: dates.from,
-          to: dates.to,
+          leaveTypeId: 'maternity',
+          fromDate: dates.from,
+          toDate: dates.to,
           reason: form.reason.trim(),
           maternityMode
         });
@@ -168,9 +182,9 @@ function EmployeeLeaves({ lang, user }) {
     });
     try {
       await leavesService.submitLeaveRequest({
-        type: lt.id,
-        from: form.from,
-        to: form.to,
+        leaveTypeId: lt.id,
+        fromDate: form.from,
+        toDate: form.to,
         reason: form.reason.trim()
       });
       showToast(lang === 'ar' ? '✅ تم تقديم طلب الإجازة بنجاح' : '✅ Leave request submitted');

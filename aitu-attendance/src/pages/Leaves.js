@@ -181,6 +181,7 @@ export default function Leaves({ t, lang, user }) {
   }
 
   /* Leave operations */
+  const myEmpId = user.employeeId || user.EmployeeId || '';
   const myLeaves = leaves.filter(l => user.role === 'admin' || user.role === 'hr' ? true : l.employeeId === myEmpId);
   const filtered = activeTab === 'all' ? myLeaves : myLeaves.filter(l => l.status === activeTab);
   const pending = myLeaves.filter(l => l.status === 'pending').length;

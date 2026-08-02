@@ -72,12 +72,33 @@ function Permissions({ lang, user }) {
 
   const visibleTypes = PERMISSION_TYPES.filter(pt => !(pt.womenOnly && !isF));
 
+  // Normalize backend field names (permissionType, durationMinutes, createdAt)
+  // to the shape the rest of this component expects (type, duration, time).
+  function normalizePermission(p) {
+    const type = String(p.type ?? p.permissionType ?? p.PermissionType ?? '').toLowerCase();
+    const status = String(p.status ?? p.Status ?? 'pending').toLowerCase();
+    const createdAt = p.createdAt ?? p.CreatedAt ?? '';
+    const time = createdAt
+      ? new Date(createdAt).toLocaleTimeString(lang === 'ar' ? 'ar-EG' : 'en-US', { hour: '2-digit', minute: '2-digit' })
+      : '';
+    return {
+      ...p,
+      id: p.id ?? p.Id ?? '',
+      type,
+      status,
+      date: p.date ?? p.Date ?? '',
+      time,
+      duration: p.durationMinutes ?? p.DurationMinutes ?? p.duration ?? 0,
+      reason: p.reason ?? p.Reason ?? '',
+    };
+  }
+
   const loadData = useCallback(async () => {
     try {
-      const [emp, dept, reqs] = await Promise.all([employeesService.getAll(), structureService.getDepartments(), permissionsService.getMyRequests()]);
-      setEmployees(emp); setDepartments(dept); setRequests(reqs);
+      const [emp, dept, reqs] = await Promise.all([employeesService.getEmployees(), structureService.getDepartments(), permissionsService.getMyPermissions()]);
+      setEmployees(emp); setDepartments(dept); setRequests((Array.isArray(reqs) ? reqs : []).map(normalizePermission));
     } finally { setLoading(false); }
-  }, []);
+  }, [lang]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -113,7 +134,7 @@ function Permissions({ lang, user }) {
     }
     try {
       await permissionsService.submitPermissionRequest({
-        type: selectedType.id,
+        permissionType: selectedType.id,
         date: form.date,
         reason: form.reason.trim(),
         durationMinutes: form.duration,

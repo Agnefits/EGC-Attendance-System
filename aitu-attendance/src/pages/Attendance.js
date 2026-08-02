@@ -86,7 +86,10 @@ function Attendance({ t, lang, user }) {
     try {
       setLoading(true);
       const [attData, empData, deptData] = await Promise.all([
-        attendanceService.getAttendanceLogs().catch(() => []),
+        (user.role === 'employee'
+          ? attendanceService.getMyAttendance()
+          : attendanceService.getAttendanceLogs()
+        ).catch(() => []),
         employeesService.getEmployees().catch(() => []),
         structureService.getDepartments().catch(() => [])
       ]);
@@ -98,7 +101,7 @@ function Attendance({ t, lang, user }) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [user.role]);
 
   useEffect(() => {
     loadData();

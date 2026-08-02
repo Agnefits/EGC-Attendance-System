@@ -1,4 +1,6 @@
 using System.Text;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -85,7 +87,16 @@ namespace Attendance_System
             });
 
             builder.Services.AddAuthorization();
-            builder.Services.AddControllers();
+            builder.Services.AddControllers()
+                .AddJsonOptions(options =>
+                {
+                    // Enums come out as lower-camelCase strings ("present", "pending", "morning"...)
+                    // matching the string ids the front-end already compares against everywhere,
+                    // instead of raw numeric enum values. allowIntegerValues keeps old numeric
+                    // payloads readable too, so nothing that currently sends numbers breaks.
+                    options.JsonSerializerOptions.Converters.Add(
+                        new JsonStringEnumConverter(JsonNamingPolicy.CamelCase, allowIntegerValues: true));
+                });
 
             // Configure Swagger / OpenAPI Generator with JWT Bearer security setup
             builder.Services.AddEndpointsApiExplorer();
