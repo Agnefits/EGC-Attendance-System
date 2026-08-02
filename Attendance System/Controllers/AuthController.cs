@@ -1,13 +1,16 @@
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Authorization;
-using System.IdentityModel.Tokens.Jwt;
+using Microsoft.EntityFrameworkCore;
+using System;
+using System.Linq;
 using System.Security.Claims;
+using System.Threading.Tasks;
 using Attendance_System.Models;
 using Attendance_System.Enums;
 using Attendance_System.Services;
 using Attendance_System.Middleware;
 using Attendance_System.UnitOfWork;
-using Attendance_System.DTOs.Auth;
+using Attendance_System.Dtos;
+using Microsoft.AspNetCore.Authorization;
 
 namespace Attendance_System.Controllers
 {
@@ -33,7 +36,10 @@ namespace Attendance_System.Controllers
         [AllowAnonymous]
         public async Task<IActionResult> Login([FromBody] LoginDto dto)
         {
-            var user = await _unitOfWork.Users.GetUserWithEmployeeByEmailAsync(dto.Email);
+            var user = await _unitOfWork.Users.Query()
+                .Include(u => u.Employee).ThenInclude(e => e!.Department)
+                .Include(u => u.Employee).ThenInclude(e => e!.College)
+                .FirstOrDefaultAsync(u => u.Email == dto.Email);
 
             if (user == null)
                 return Unauthorized(new { success = false, message = "Invalid email" });
@@ -41,7 +47,7 @@ namespace Attendance_System.Controllers
             if (!BCrypt.Net.BCrypt.Verify(dto.Password, user.PasswordHash))
                 return Unauthorized(new { success = false, message = "Invalid password" });
 
-            if (!user.IsActive)
+            if (!user.IsActive || user.DeletedAt != null)
                 return Unauthorized(new { success = false, message = "Account is inactive, please contact administration" });
 
             user.LastLoginAt = DateTime.Now;
@@ -55,14 +61,15 @@ namespace Attendance_System.Controllers
             {
                 success = true,
                 message = "Login successful",
-                data = new AuthResponseDto
+                data = new LoginResponseDto
                 {
                     Token = token,
                     UserId = user.Id,
                     Email = user.Email,
-                    Role = user.Role,
+                    Role = user.Role.ToString(),
                     EmployeeId = user.Employee?.Id,
                     EmployeeName = user.Employee?.Name,
+                    DepartmentId = user.Employee?.DepartmentId,
                     Department = user.Employee?.Department?.Name,
                     College = user.Employee?.College?.Name
                 }
@@ -77,8 +84,8 @@ namespace Attendance_System.Controllers
             if (userEmailExists)
                 return BadRequest(new { success = false, message = "Email is already registered" });
 
-            var employeeEmailExists = await _unitOfWork.Employees.GetByEmailAsync(dto.Email);
-            if (employeeEmailExists != null)
+            var employeeEmailExists = await _unitOfWork.Employees.Query().AnyAsync(e => e.Email == dto.Email);
+            if (employeeEmailExists)
                 return BadRequest(new { success = false, message = "Employee email already exists" });
 
             var employee = new Employee
@@ -101,6 +108,7 @@ namespace Attendance_System.Controllers
             };
 
             await _unitOfWork.Employees.AddAsync(employee);
+            await _unitOfWork.CompleteAsync();
 
             var user = new User
             {
@@ -122,7 +130,7 @@ namespace Attendance_System.Controllers
             {
                 success = true,
                 message = "Registration successful",
-                data = new { UserId = user.Id, EmployeeId = employee.Id }
+                data = new RegisterResponseDto { UserId = user.Id, EmployeeId = employee.Id }
             });
         }
 
@@ -158,36 +166,38 @@ namespace Attendance_System.Controllers
             if (userId == null)
                 return Unauthorized();
 
-            var user = await _unitOfWork.Users.GetUserWithEmployeeAsync(userId.Value);
+            var user = await _unitOfWork.Users.Query()
+                .Include(u => u.Employee).ThenInclude(e => e!.Department)
+                .Include(u => u.Employee).ThenInclude(e => e!.College)
+                .Where(u => u.Id == userId)
+                .Select(u => new CurrentUserDto
+                {
+                    Id = u.Id,
+                    Email = u.Email,
+                    Role = u.Role,
+                    IsActive = u.IsActive,
+                    CreatedAt = u.CreatedAt,
+                    LastLoginAt = u.LastLoginAt,
+                    Employee = u.Employee != null ? new CurrentUserEmployeeDto
+                    {
+                        Id = u.Employee.Id,
+                        Name = u.Employee.Name,
+                        NameEn = u.Employee.NameEn,
+                        Phone = u.Employee.Phone,
+                        Gender = u.Employee.Gender,
+                        DepartmentId = u.Employee.DepartmentId,
+                        Department = u.Employee.Department != null ? u.Employee.Department.Name : null,
+                        College = u.Employee.College != null ? u.Employee.College.Name : null,
+                        Type = u.Employee.Type,
+                        RoleClassification = u.Employee.RoleClassification
+                    } : null
+                })
+                .FirstOrDefaultAsync();
 
             if (user == null)
                 return NotFound();
 
-            return Ok(new
-            {
-                success = true,
-                data = new
-                {
-                    user.Id,
-                    user.Email,
-                    user.Role,
-                    user.IsActive,
-                    user.CreatedAt,
-                    user.LastLoginAt,
-                    Employee = user.Employee != null ? new
-                    {
-                        user.Employee.Id,
-                        user.Employee.Name,
-                        user.Employee.NameEn,
-                        user.Employee.Phone,
-                        user.Employee.Gender,
-                        Department = user.Employee.Department?.Name,
-                        College = user.Employee.College?.Name,
-                        user.Employee.Type,
-                        user.Employee.RoleClassification
-                    } : null
-                }
-            });
+            return Ok(new { success = true, data = user });
         }
 
         [HttpGet("validate-token")]
@@ -199,7 +209,7 @@ namespace Attendance_System.Controllers
         private long? GetCurrentUserId()
         {
             var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            return userIdClaim != null && long.TryParse(userIdClaim, out var id) ? id : null;
+            return userIdClaim != null && long.TryParse(userIdClaim, out var id) ? id : (long?)null;
         }
     }
 }

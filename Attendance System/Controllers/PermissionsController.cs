@@ -33,17 +33,15 @@ namespace Attendance_System.Controllers
 
             if (departmentId != null)
             {
-                requests = await _unitOfWork.PermissionRequests.GetPendingByDepartmentWithDetailsAsync(departmentId);
+                requests = await _unitOfWork.PermissionRequests.GetAllByDepartmentWithDetailsAsync(departmentId);
             }
             else if (employeeId != null)
             {
-                requests = await _unitOfWork.PermissionRequests.GetByEmployeeIdWithDetailsAsync(employeeId);
+                requests = await _unitOfWork.PermissionRequests.GetAllByEmployeeWithDetailsAsync(employeeId);
             }
             else
             {
-                var allRequests = await _unitOfWork.PermissionRequests.GetAllAsync();
-                requests = allRequests
-                    .Where(p => p.Employee != null && p.Employee.DeletedAt == null);
+                requests = await _unitOfWork.PermissionRequests.GetAllWithDetailsAsync();
             }
 
             if (status.HasValue)

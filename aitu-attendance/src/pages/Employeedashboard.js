@@ -323,7 +323,20 @@ export default function EmployeeDashboard({lang,user,setActivePage}){
 
   const EMPLOYEES = employees;
   const ATTENDANCE = attendance;
-  const LEAVES = leavesList;
+  // Normalize backend field names (leaveTypeId/fromDate/toDate/daysCount/status)
+  // to what this component reads (type/from/to/days). The /Leave/requests/my
+  // endpoint already scopes results to the current employee, so employeeId
+  // isn't returned — default it to the current user so the myLv filter below
+  // still matches instead of silently filtering everything out.
+  const LEAVES = leavesList.map(l => ({
+    ...l,
+    employeeId: l.employeeId ?? l.EmployeeId ?? user?.employeeId ?? user?.id,
+    type: l.leaveTypeId ?? l.LeaveTypeId ?? l.type ?? '',
+    from: l.fromDate ?? l.FromDate ?? l.from ?? '',
+    to: l.toDate ?? l.ToDate ?? l.to ?? '',
+    days: l.daysCount ?? l.DaysCount ?? l.days ?? 0,
+    status: String(l.status ?? l.Status ?? 'pending').toLowerCase(),
+  }));
   const PERMISSIONS = permsList;
   const DEPARTMENTS = departments;
   const COLLEGES = colleges;

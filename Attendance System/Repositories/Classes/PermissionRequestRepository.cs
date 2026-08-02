@@ -91,5 +91,36 @@ namespace Attendance_System.Repositories.Classes
                     && p.Status == LeaveStatus.Approved && p.Date >= startDate && p.Date <= endDate)
                 .SumAsync(p => (int?)p.DurationMinutes) ?? 0;
         }
+
+        // إضافات جديدة
+        public async Task<IEnumerable<PermissionRequest>> GetAllByDepartmentWithDetailsAsync(string departmentId)
+        {
+            return await _dbSet
+                .Include(p => p.Employee).ThenInclude(e => e!.Department)
+                .Include(p => p.Approver)
+                .Where(p => p.Employee != null && p.Employee.DepartmentId == departmentId)
+                .OrderByDescending(p => p.CreatedAt)
+                .ToListAsync();
+        }
+
+        public async Task<IEnumerable<PermissionRequest>> GetAllByEmployeeWithDetailsAsync(string employeeId)
+        {
+            return await _dbSet
+                .Include(p => p.Employee).ThenInclude(e => e!.Department)
+                .Include(p => p.Approver)
+                .Where(p => p.EmployeeId == employeeId)
+                .OrderByDescending(p => p.CreatedAt)
+                .ToListAsync();
+        }
+
+        public async Task<IEnumerable<PermissionRequest>> GetAllWithDetailsAsync()
+        {
+            return await _dbSet
+                .Include(p => p.Employee).ThenInclude(e => e!.Department)
+                .Include(p => p.Approver)
+                .Where(p => p.Employee != null && p.Employee.DeletedAt == null)
+                .OrderByDescending(p => p.CreatedAt)
+                .ToListAsync();
+        }
     }
 }

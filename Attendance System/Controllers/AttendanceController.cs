@@ -1,14 +1,15 @@
-using Attendance_System.DTOs.Attendance;
-using Attendance_System.Enums;
-using Attendance_System.Middleware;
-using Attendance_System.Models;
-using Attendance_System.UnitOfWork;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System;
+using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using System.Security.Claims;
 using System.Threading.Tasks;
+using Attendance_System.Models;
+using Attendance_System.Enums;
+using Attendance_System.Middleware;
+using Attendance_System.UnitOfWork;
 
 namespace Attendance_System.Controllers
 {
@@ -17,6 +18,7 @@ namespace Attendance_System.Controllers
     public class AttendanceController : ControllerBase
     {
         private readonly IUnitOfWork _unitOfWork;
+
         private const double DefaultCampusLat = 27.184187;
         private const double DefaultCampusLng = 31.172920;
         private const double DefaultCampusRadius = 500;
@@ -30,40 +32,53 @@ namespace Attendance_System.Controllers
         [HttpGet]
         [AuthorizedRoles(UserRole.Admin, UserRole.Hr, UserRole.Head)]
         public async Task<IActionResult> GetAll(
-    [FromQuery] DateOnly? from,
-    [FromQuery] DateOnly? to,
-    [FromQuery] string? employeeId,
-    [FromQuery] string? departmentId,
-    [FromQuery] AttendanceStatus? status,
-    [FromQuery] int page = 1,
-    [FromQuery] int pageSize = 20)
+            [FromQuery] DateOnly? from,
+            [FromQuery] DateOnly? to,
+            [FromQuery] string? employeeId,
+            [FromQuery] string? departmentId,
+            [FromQuery] AttendanceStatus? status,
+            [FromQuery] int page = 1,
+            [FromQuery] int pageSize = 20)
         {
-            var total = await _unitOfWork.AttendanceLogs.GetFilteredCountAsync(from, to, employeeId, departmentId, status);
+            var query = _unitOfWork.AttendanceLogs.Query()
+                .Include(a => a.Employee).ThenInclude(e => e!.Department)
+                .Include(a => a.Employee).ThenInclude(e => e!.College)
+                .AsQueryable();
 
-            var attendances = await _unitOfWork.AttendanceLogs.GetFilteredAsync(
-                from, to, employeeId, departmentId, status, page, pageSize);
+            if (from.HasValue) query = query.Where(a => a.Date >= from.Value);
+            if (to.HasValue) query = query.Where(a => a.Date <= to.Value);
+            if (!string.IsNullOrEmpty(employeeId)) query = query.Where(a => a.EmployeeId == employeeId);
+            if (!string.IsNullOrEmpty(departmentId)) query = query.Where(a => a.Employee!.DepartmentId == departmentId);
+            if (status.HasValue) query = query.Where(a => a.Status == status.Value);
 
-            var result = attendances.Select(a => new AttendanceListDto
-            {
-                Id = a.Id,
-                EmployeeId = a.EmployeeId,
-                EmployeeName = a.Employee?.Name ?? string.Empty,
-                Department = a.Employee?.Department?.Name,
-                College = a.Employee?.College?.Name,
-                Date = a.Date,
-                CheckIn = a.CheckIn,
-                CheckOut = a.CheckOut,
-                Status = a.Status,
-                Latitude = a.Latitude,
-                Longitude = a.Longitude,
-                DistanceFromCampus = a.DistanceFromCampus,
-                ResolutionMethod = a.ResolutionMethod
-            });
+            var total = await query.CountAsync();
+
+            var attendances = await query
+                .OrderByDescending(a => a.Date)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .Select(a => new AttendanceListItemDto
+                {
+                    Id = a.Id,
+                    EmployeeId = a.EmployeeId,
+                    EmployeeName = a.Employee!.Name,
+                    Department = a.Employee.Department != null ? a.Employee.Department.Name : null,
+                    College = a.Employee.College != null ? a.Employee.College.Name : null,
+                    Date = a.Date,
+                    CheckIn = a.CheckIn,
+                    CheckOut = a.CheckOut,
+                    Status = a.Status,
+                    Latitude = a.Latitude,
+                    Longitude = a.Longitude,
+                    DistanceFromCampus = a.DistanceFromCampus,
+                    ResolutionMethod = a.ResolutionMethod
+                })
+                .ToListAsync();
 
             return Ok(new
             {
                 success = true,
-                data = result,
+                data = attendances,
                 pagination = new { page, pageSize, total, totalPages = (int)Math.Ceiling((double)total / pageSize) }
             });
         }
@@ -73,51 +88,20 @@ namespace Attendance_System.Controllers
         public async Task<IActionResult> GetMy()
         {
             var employeeId = GetCurrentEmployeeId();
-            if (string.IsNullOrEmpty(employeeId))
-                return Unauthorized(new { success = false, message = "No employee linked to this account" });
+            if (string.IsNullOrEmpty(employeeId)) return Unauthorized(new { success = false, message = "No employee linked to this account" });
 
-            var attendances = await _unitOfWork.AttendanceLogs.GetByEmployeeIdWithDetailsAsync(employeeId);
+            var attendances = await _unitOfWork.AttendanceLogs.GetByEmployeeIdAsync(employeeId);
 
-            var result = attendances.Select(a => new AttendanceDto
-            {
-                Id = a.Id,
-                EmployeeId = a.EmployeeId,
-                EmployeeName = a.Employee?.Name ?? string.Empty,
-                Date = a.Date,
-                CheckIn = a.CheckIn,
-                CheckOut = a.CheckOut,
-                Status = a.Status,
-                Latitude = a.Latitude,
-                Longitude = a.Longitude,
-                DistanceFromCampus = a.DistanceFromCampus,
-                ResolutionMethod = a.ResolutionMethod
-            });
-
-            return Ok(new { success = true, data = result });
+            return Ok(new { success = true, data = attendances.OrderByDescending(a => a.Date) });
         }
 
         [HttpGet("employee/{employeeId}")]
         [AuthorizedRoles(UserRole.Admin, UserRole.Hr, UserRole.Head)]
         public async Task<IActionResult> GetByEmployee(string employeeId)
         {
-            var attendances = await _unitOfWork.AttendanceLogs.GetByEmployeeIdWithDetailsAsync(employeeId);
+            var attendances = await _unitOfWork.AttendanceLogs.GetByEmployeeIdAsync(employeeId);
 
-            var result = attendances.Select(a => new AttendanceDto
-            {
-                Id = a.Id,
-                EmployeeId = a.EmployeeId,
-                EmployeeName = a.Employee?.Name ?? string.Empty,
-                Date = a.Date,
-                CheckIn = a.CheckIn,
-                CheckOut = a.CheckOut,
-                Status = a.Status,
-                Latitude = a.Latitude,
-                Longitude = a.Longitude,
-                DistanceFromCampus = a.DistanceFromCampus,
-                ResolutionMethod = a.ResolutionMethod
-            });
-
-            return Ok(new { success = true, data = result });
+            return Ok(new { success = true, data = attendances.OrderByDescending(a => a.Date) });
         }
 
         [HttpGet("today")]
@@ -125,36 +109,23 @@ namespace Attendance_System.Controllers
         public async Task<IActionResult> GetTodayAttendance()
         {
             var today = DateOnly.FromDateTime(DateTime.Today);
-            var totalEmployees = await _unitOfWork.Employees.GetActiveEmployeesCountAsync();
+            var totalEmployees = await _unitOfWork.Employees.Query().CountAsync(e => e.Status == "active" && e.DeletedAt == null);
 
-            var attendances = await _unitOfWork.AttendanceLogs.GetByDateRangeWithDetailsAsync(today, today);
-
-            var result = attendances.Select(a => new AttendanceDto
-            {
-                Id = a.Id,
-                EmployeeId = a.EmployeeId,
-                EmployeeName = a.Employee?.Name ?? string.Empty,
-                Department = a.Employee?.Department?.Name,
-                Date = a.Date,
-                CheckIn = a.CheckIn,
-                CheckOut = a.CheckOut,
-                Status = a.Status,
-                Latitude = a.Latitude,
-                Longitude = a.Longitude,
-                DistanceFromCampus = a.DistanceFromCampus,
-                ResolutionMethod = a.ResolutionMethod
-            }).ToList();
+            var attendances = await _unitOfWork.AttendanceLogs.Query()
+                .Include(a => a.Employee).ThenInclude(e => e!.Department)
+                .Where(a => a.Date == today)
+                .ToListAsync();
 
             return Ok(new
             {
                 success = true,
-                data = new AttendanceSummaryDto
+                data = new
                 {
                     Date = today,
                     TotalEmployees = totalEmployees,
-                    CheckedIn = result.Count(a => a.CheckIn != null),
-                    CheckedOut = result.Count(a => a.CheckOut != null),
-                    Details = result
+                    CheckedIn = attendances.Count(a => a.CheckIn != null),
+                    CheckedOut = attendances.Count(a => a.CheckOut != null),
+                    Details = attendances
                 }
             });
         }
@@ -167,8 +138,8 @@ namespace Attendance_System.Controllers
             if (string.IsNullOrEmpty(employeeId))
                 return Unauthorized(new { success = false, message = "No employee linked to this account" });
 
-            var employee = await _unitOfWork.Employees.GetEmployeeWithDepartmentAndCollegeAsync(employeeId);
-            if (employee == null || employee.Status != "active")
+            var employee = await _unitOfWork.Employees.GetByIdAsync(employeeId);
+            if (employee == null || employee.Status != "active" || employee.DeletedAt != null)
                 return BadRequest(new { success = false, message = "Employee not found or inactive" });
 
             if (dto.Latitude == null || dto.Longitude == null)
@@ -201,6 +172,8 @@ namespace Attendance_System.Controllers
             if (schedule?.CheckInTime != null && now > schedule.CheckInTime.Value.AddMinutes(15))
                 status = AttendanceStatus.Late;
 
+            var resolutionMethod = ParseResolutionMethod(dto.ResolutionMethod);
+
             var attendance = new AttendanceLog
             {
                 Id = Guid.NewGuid().ToString(),
@@ -212,7 +185,7 @@ namespace Attendance_System.Controllers
                 Longitude = dto.Longitude,
                 GpsAccuracy = dto.GpsAccuracy,
                 DistanceFromCampus = (decimal)Math.Round(distance, 2),
-                ResolutionMethod = dto.ResolutionMethod,
+                ResolutionMethod = resolutionMethod,
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow
             };
@@ -235,7 +208,7 @@ namespace Attendance_System.Controllers
             var employeeId = GetCurrentEmployeeId();
             var role = User.FindFirst(ClaimTypes.Role)?.Value;
 
-            var attendance = await _unitOfWork.AttendanceLogs.GetByIdWithEmployeeAsync(id);
+            var attendance = await _unitOfWork.AttendanceLogs.GetByIdAsync(id);
             if (attendance == null || attendance.CheckOut != null)
                 return BadRequest(new { success = false, message = "Record not found or already checked out" });
 
@@ -258,7 +231,7 @@ namespace Attendance_System.Controllers
             });
         }
 
-        // ── Helpers ──
+        // ── helpers ──
 
         private string? GetCurrentEmployeeId() => User.FindFirst("EmployeeId")?.Value;
 
@@ -291,14 +264,66 @@ namespace Attendance_System.Controllers
 
         private async Task<WorkSchedule?> GetWorkSchedule(string employeeId)
         {
-            var assignment = await _unitOfWork.ScheduleAssignments.GetByEmployeeIdWithScheduleAsync(employeeId);
+            var assignment = await _unitOfWork.ScheduleAssignments.Query()
+                .Include(sa => sa.Schedule)
+                .FirstOrDefaultAsync(sa => sa.EmployeeId == employeeId);
+
             if (assignment?.Schedule != null) return assignment.Schedule;
 
-            var departmentId = await _unitOfWork.Employees.GetDepartmentIdByEmployeeIdAsync(employeeId);
-            if (departmentId == null) return null;
+            var employee = await _unitOfWork.Employees.GetByIdAsync(employeeId);
+            if (employee?.DepartmentId == null) return null;
 
-            var deptAssignment = await _unitOfWork.ScheduleAssignments.GetByDepartmentIdWithScheduleAsync(departmentId);
+            var deptAssignment = await _unitOfWork.ScheduleAssignments.Query()
+                .Include(sa => sa.Schedule)
+                .FirstOrDefaultAsync(sa => sa.DepartmentId == employee.DepartmentId);
+
             return deptAssignment?.Schedule;
         }
+
+        // Accepts front-end values regardless of casing/separators: "gps-high", "gpsHigh",
+        // "GpsHigh", "network", "Network"... instead of requiring an exact enum-name match.
+        private static ResolutionMethod? ParseResolutionMethod(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return null;
+
+            var normalized = value.Replace("-", "").Replace("_", "").Trim().ToLowerInvariant();
+            return normalized switch
+            {
+                "gpshigh" => ResolutionMethod.GpsHigh,
+                "network" => ResolutionMethod.Network,
+                _ => null
+            };
+        }
+    }
+
+    // ── Response DTO ──
+
+    public class AttendanceListItemDto
+    {
+        public string Id { get; set; } = string.Empty;
+        public string EmployeeId { get; set; } = string.Empty;
+        public string EmployeeName { get; set; } = string.Empty;
+        public string? Department { get; set; }
+        public string? College { get; set; }
+        public DateOnly Date { get; set; }
+        public TimeOnly? CheckIn { get; set; }
+        public TimeOnly? CheckOut { get; set; }
+        public AttendanceStatus Status { get; set; }
+        public decimal? Latitude { get; set; }
+        public decimal? Longitude { get; set; }
+        public decimal? DistanceFromCampus { get; set; }
+        public ResolutionMethod? ResolutionMethod { get; set; }
+    }
+
+    // ── Request DTO (unchanged) ──
+
+    public class CheckInDto
+    {
+        public decimal? Latitude { get; set; }
+        public decimal? Longitude { get; set; }
+        public decimal? GpsAccuracy { get; set; }
+        // Accepted as a plain string and parsed leniently in the controller
+        // (handles "gps-high", "gpsHigh", "network", etc. from the front-end).
+        public string? ResolutionMethod { get; set; }
     }
 }

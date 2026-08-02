@@ -417,7 +417,7 @@ return (
                 </div>
               ) : (
                 <div style={{ display: 'flex', gap: '10px' }}>
-                  <button onClick={reject} disabled={!rejectNote.trim()}
+                  <button onClick={() => reject(modal.id)} disabled={!rejectNote.trim()}
                     style={{ flex: 1, padding: '13px', background: rejectNote.trim() ? '#991B1B' : '#E2E8F0', color: rejectNote.trim() ? 'white' : '#94A3B8', border: 'none', borderRadius: '12px', fontSize: '14px', fontWeight: '700', cursor: rejectNote.trim() ? 'pointer' : 'not-allowed', fontFamily: 'Cairo', transition: 'all .18s', boxShadow: rejectNote.trim() ? '0 4px 12px rgba(153,27,27,.3)' : 'none' }}>
                     {lang === 'ar' ? 'تأكيد الرفض' : 'Confirm Reject'}
                   </button>

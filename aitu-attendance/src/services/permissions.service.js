@@ -17,8 +17,11 @@ export const permissionsService = {
   },
 
   updatePermissionStatus: async (id, status, rejectionNote = null) => {
-    const endpoint = status === 'approved' ? `/permissions/${id}/approve` : `/permissions/${id}/reject`;
-    const res = await api.put(endpoint, { note: rejectionNote, rejectionNote });
+    const approved = status === 'approved';
+    const res = await api.put(`/permissions/${id}/approve`, {
+      approved,
+      rejectionNote: approved ? null : (rejectionNote || ''),
+    });
     return res;
   },
 };

@@ -17,5 +17,10 @@ namespace Attendance_System.Repositories.Interfaces
         Task<int> GetPendingCountByDepartmentAsync(string departmentId);
         Task<int> GetUsedMinutesByEmployeeAndDateRangeAsync(string employeeId, DateOnly startDate, DateOnly endDate);
         Task<int> GetUsedMinutesByEmployeeAndDateRangeExcludingNursingAsync(string employeeId, DateOnly startDate, DateOnly endDate);
+
+        // إضافات جديدة
+        Task<IEnumerable<PermissionRequest>> GetAllByDepartmentWithDetailsAsync(string departmentId);
+        Task<IEnumerable<PermissionRequest>> GetAllByEmployeeWithDetailsAsync(string employeeId);
+        Task<IEnumerable<PermissionRequest>> GetAllWithDetailsAsync();
     }
 }
