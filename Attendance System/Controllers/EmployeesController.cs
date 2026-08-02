@@ -33,7 +33,8 @@ namespace Attendance_System.Controllers
 
             // A department Head only manages their own department's staff, and never
             // Admin/Hr accounts — regardless of department — since those are system-level roles.
-            if (User.FindFirst(ClaimTypes.Role)?.Value == "Head")
+            var callerRole = User.FindFirst(ClaimTypes.Role)?.Value;
+            if (callerRole == "Head")
             {
                 var headDeptId = await GetCurrentDepartmentIdAsync();
                 query = query.Where(e => e.DepartmentId == headDeptId
@@ -41,6 +42,10 @@ namespace Attendance_System.Controllers
             }
             else
             {
+                // No one other than Admin themself should see/manage the Admin account.
+                if (callerRole != "Admin")
+                    query = query.Where(e => e.User == null || e.User.Role != UserRole.Admin);
+
                 if (!string.IsNullOrEmpty(departmentId)) query = query.Where(e => e.DepartmentId == departmentId);
             }
 
@@ -117,12 +122,22 @@ namespace Attendance_System.Controllers
                 })
                 .FirstOrDefaultAsync();
 
-            if (employee != null && User.FindFirst(ClaimTypes.Role)?.Value == "Head")
+            if (employee != null)
             {
-                var headDeptId = await GetCurrentDepartmentIdAsync();
-                var isPrivileged = employee.User != null && (employee.User.Role == UserRole.Admin || employee.User.Role == UserRole.Hr);
-                if (employee.DepartmentId != headDeptId || isPrivileged)
-                    return StatusCode(403, new { success = false, message = "You can only view employees in your own department" });
+                var callerRole = User.FindFirst(ClaimTypes.Role)?.Value;
+                var isAdminAccount = employee.User != null && employee.User.Role == UserRole.Admin;
+
+                if (callerRole == "Head")
+                {
+                    var headDeptId = await GetCurrentDepartmentIdAsync();
+                    var isPrivileged = isAdminAccount || (employee.User != null && employee.User.Role == UserRole.Hr);
+                    if (employee.DepartmentId != headDeptId || isPrivileged)
+                        return StatusCode(403, new { success = false, message = "You can only view employees in your own department" });
+                }
+                else if (callerRole != "Admin" && isAdminAccount)
+                {
+                    return StatusCode(403, new { success = false, message = "You do not have permission to view this employee" });
+                }
             }
 
             if (employee == null) return NotFound(new { success = false, message = "Employee not found" });
@@ -173,6 +188,13 @@ namespace Attendance_System.Controllers
         {
             var employee = await _unitOfWork.Employees.GetByIdAsync(id);
             if (employee == null) return NotFound(new { success = false, message = "Employee not found" });
+
+            if (User.FindFirst(ClaimTypes.Role)?.Value != "Admin")
+            {
+                var linkedUser = await _unitOfWork.Users.Query().FirstOrDefaultAsync(u => u.EmployeeId == id);
+                if (linkedUser != null && linkedUser.Role == UserRole.Admin)
+                    return StatusCode(403, new { success = false, message = "You do not have permission to modify this employee" });
+            }
 
             employee.Name = dto.Name ?? employee.Name;
             employee.NameEn = dto.NameEn ?? employee.NameEn;
