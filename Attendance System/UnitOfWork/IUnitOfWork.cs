@@ -17,6 +17,7 @@ namespace Attendance_System.UnitOfWork
         IPermissionRequestRepository PermissionRequests { get; }
         IWorkScheduleRepository WorkSchedules { get; }
         IScheduleAssignmentRepository ScheduleAssignments { get; }
+        IScheduleSessionRepository ScheduleSessions { get; }
         IExamScheduleRepository ExamSchedules { get; }
         IGenericRepository<SystemSetting> SystemSettings { get; }
 

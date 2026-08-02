@@ -1,7 +1,7 @@
 import { calcUsedPermsMins, getLeaveYearPeriod } from './leaveValidation';
 import useNotifications from './useNotifications';
 import React, { useState, useEffect, useRef } from 'react';
-import { attendanceService, employeesService, leavesService, permissionsService, structureService } from '../services';
+import { attendanceService, employeesService, leavesService, permissionsService, structureService, scheduleService } from '../services';
 
 const ATT={
   present:{l:{ar:'حاضر', en:'Present'},c:'#166534',bg:'#DCFCE7',bd:'#BBF7D0',dot:'#16A34A'},
@@ -53,6 +53,51 @@ function WeekSummary({lang,dir,schedule,card,mini=false}){
   const [addExamOpen, setAddExamOpen] = React.useState(false);
   const [newExam, setNewExam] = React.useState({title:'',date:'',time:'',room:'',notes:''});
   const [examErr, setExamErr] = React.useState('');
+
+  // Load exams from the API and map backend fields to what this component reads.
+  const loadExams = async () => {
+    try {
+      const data = await scheduleService.getMyExams();
+      const mapped = (Array.isArray(data) ? data : []).map(e => ({
+        id: e.id ?? e.Id,
+        title: e.title ?? e.Title ?? '',
+        date: e.date ?? e.Date ?? '',
+        time: e.timeSlot ?? e.TimeSlot ?? '',
+        room: e.roomLocation ?? e.RoomLocation ?? '',
+        notes: e.notes ?? e.Notes ?? '',
+      }));
+      setExams(mapped);
+    } catch (e) { console.error(e); }
+  };
+
+  React.useEffect(() => {
+    loadExams();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const saveExam = async () => {
+    if(!newExam.title.trim()){setExamErr(lang==='ar'?'أدخل اسم الامتحان':'Enter exam name');return;}
+    if(!newExam.date){setExamErr(lang==='ar'?'اختر التاريخ':'Select date');return;}
+    try {
+      await scheduleService.createExam({
+        title: newExam.title.trim(),
+        date: newExam.date,
+        timeSlot: newExam.time || '',
+        roomLocation: newExam.room || '',
+        notes: newExam.notes || '',
+      });
+      setAddExamOpen(false); setExamErr('');
+      setNewExam({title:'',date:'',time:'',room:'',notes:''});
+      await loadExams();
+    } catch (e) {
+      setExamErr(e?.message || (lang==='ar'?'فشل حفظ الامتحان':'Failed to save exam'));
+    }
+  };
+
+  const deleteExam = async (id) => {
+    try { await scheduleService.deleteExam(id); await loadExams(); }
+    catch (e) { console.error(e); }
+  };
 
   const nextWeekDays = Array.from({length:7}).map((_,i)=>{
     const d=new Date(); d.setDate(d.getDate()+1+i);
@@ -152,7 +197,7 @@ function WeekSummary({lang,dir,schedule,card,mini=false}){
                     <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:'4px',flexShrink:0}}>
                       {isToday&&<span style={{background:'#6B21A8',color:'white',padding:'2px 8px',borderRadius:'999px',fontSize:'10px',fontWeight:'700'}}>{lang==='ar'?'اليوم':'Today'}</span>}
                       {isPast&&<span style={{background:'#F1F5F9',color:'#94A3B8',padding:'2px 8px',borderRadius:'999px',fontSize:'10px',fontWeight:'700'}}>{lang==='ar'?'انتهى':'Done'}</span>}
-                      <button onClick={()=>setExams(p=>p.filter(e=>e.id!==ex.id))}
+                      <button onClick={()=>deleteExam(ex.id)}
                         style={{background:'none',border:'none',cursor:'pointer',color:'#CBD5E1',fontSize:'14px',lineHeight:1,transition:'color .15s'}}
                         onMouseEnter={e=>e.currentTarget.style.color='#DC2626'}
                         onMouseLeave={e=>e.currentTarget.style.color='#CBD5E1'}>×</button>
@@ -210,12 +255,7 @@ function WeekSummary({lang,dir,schedule,card,mini=false}){
                 onMouseLeave={e=>e.currentTarget.style.background='white'}>
                 {lang==='ar'?'إلغاء':'Cancel'}
               </button>
-              <button onClick={()=>{
-                if(!newExam.title.trim()){setExamErr(lang==='ar'?'أدخل اسم الامتحان':'Enter exam name');return;}
-                if(!newExam.date){setExamErr(lang==='ar'?'اختر التاريخ':'Select date');return;}
-                setExams(p=>[...p,{...newExam,id:Date.now()}]);
-                setAddExamOpen(false);setExamErr('');
-              }}
+              <button onClick={saveExam}
                 style={{flex:2,padding:'10px',background:'linear-gradient(135deg,#4C1D95,#6B21A8)',color:'white',border:'none',borderRadius:'10px',fontSize:'13px',fontWeight:'700',cursor:'pointer',fontFamily:'Cairo',boxShadow:'0 4px 12px rgba(107,33,168,.3)'}}>
                 📝 {lang==='ar'?'إضافة الامتحان':'Add Exam'}
               </button>
@@ -293,19 +333,68 @@ export default function EmployeeDashboard({lang,user,setActivePage}){
   const isDemo    = rank.includes('معيد')||rank.includes('مدرس مساعد')||rank.includes('Demonstrator')||rank.includes('Asst');
   const schedTitle= isDemo?{ar:'جدول السكاشن',en:'Sections Schedule'}:{ar:'جدول المحاضرات',en:'Lectures Schedule'};
   const SLOT_COLORS=['#1565C0','#166534','#B45309','#6B21A8','#0891B2','#991B1B'];
-  const [schedule,setSchedule]=useState([0,1,2,3,4,6].map(d=>({day:d,entries:[]})));
+  const SCHEDULE_DAYS=[0,1,2,3,4,6];
+  const [schedule,setSchedule]=useState(SCHEDULE_DAYS.map(d=>({day:d,entries:[]})));
   const [addSlotOpen,setAddSlotOpen]=useState(false);
   const [newSlot,setNewSlot]=useState({day:0,from:'08:00',to:'09:00',subject:'',room:'',group:''});
   const [slotErr,setSlotErr]=useState('');
 
-  function addSlot(){
+  // Build the grouped-by-day shape the UI expects from the flat API rows.
+  // Backend times are TimeOnly -> "HH:mm:ss"; trim to "HH:mm".
+  const timeHHMM=(t)=> t ? String(t).slice(0,5) : '';
+  const buildSchedule=(sessions)=>SCHEDULE_DAYS.map(d=>({
+    day:d,
+    entries:(Array.isArray(sessions)?sessions:[])
+      .filter(s=>Number(s.dayOfWeek ?? s.DayOfWeek)===d)
+      .map((s,i)=>({
+        id:s.id ?? s.Id,
+        subject:s.subject ?? s.Subject ?? '',
+        from:timeHHMM(s.startTime ?? s.StartTime),
+        to:timeHHMM(s.endTime ?? s.EndTime),
+        room:s.room ?? s.Room ?? '',
+        group:s.groupName ?? s.GroupName ?? '',
+        color:SLOT_COLORS[i%SLOT_COLORS.length],
+      })),
+  }));
+
+  const loadSessions=async()=>{
+    try{
+      const data=await scheduleService.getMySessions();
+      setSchedule(buildSchedule(data));
+    }catch(e){ console.error(e); }
+  };
+
+  async function addSlot(){
     if(!newSlot.subject.trim()){setSlotErr(lang==='ar'?'أدخل اسم المادة':'Enter subject');return;}
-    setSchedule(p=>p.map(d=>d.day===newSlot.day?{...d,entries:[...d.entries,{...newSlot,id:Date.now(),color:SLOT_COLORS[d.entries.length%SLOT_COLORS.length]}]}:d));
-    setAddSlotOpen(false);setNewSlot({day:0,from:'08:00',to:'09:00',subject:'',room:'',group:''});setSlotErr('');
+    if(newSlot.to<=newSlot.from){setSlotErr(lang==='ar'?'وقت النهاية يجب أن يكون بعد البداية':'End must be after start');return;}
+    try{
+      await scheduleService.createSession({
+        subject:newSlot.subject.trim(),
+        dayOfWeek:newSlot.day,
+        startTime:newSlot.from,
+        endTime:newSlot.to,
+        groupName:newSlot.group||'',
+        room:newSlot.room||'',
+      });
+      setAddSlotOpen(false);setNewSlot({day:0,from:'08:00',to:'09:00',subject:'',room:'',group:''});setSlotErr('');
+      await loadSessions();
+    }catch(e){
+      setSlotErr(e?.message||(lang==='ar'?'فشل حفظ الحصة':'Failed to save session'));
+    }
   }
-  function removeSlot(di,id){setSchedule(p=>p.map(d=>d.day===di?{...d,entries:d.entries.filter(e=>e.id!==id)}:d));}
+  async function removeSlot(di,id){
+    try{
+      await scheduleService.deleteSession(id);
+      await loadSessions();
+    }catch(e){ console.error(e); }
+  }
 
   const { notifs: NOTIFS, unread } = useNotifications({ user, lang });
+
+  useEffect(()=>{
+    loadSessions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[]);
 
   useEffect(()=>{
     const tick=()=>{

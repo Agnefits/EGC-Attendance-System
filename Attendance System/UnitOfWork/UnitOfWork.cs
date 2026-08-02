@@ -22,6 +22,7 @@ namespace Attendance_System.UnitOfWork
         public IPermissionRequestRepository PermissionRequests { get; private set; }
         public IWorkScheduleRepository WorkSchedules { get; private set; }
         public IScheduleAssignmentRepository ScheduleAssignments { get; private set; }
+        public IScheduleSessionRepository ScheduleSessions { get; private set; }
         public IExamScheduleRepository ExamSchedules { get; private set; }
         public IGenericRepository<SystemSetting> SystemSettings { get; private set; }
 
@@ -38,6 +39,7 @@ namespace Attendance_System.UnitOfWork
             PermissionRequests = new PermissionRequestRepository(_context);
             WorkSchedules = new WorkScheduleRepository(_context);
             ScheduleAssignments = new ScheduleAssignmentRepository(_context);
+            ScheduleSessions = new ScheduleSessionRepository(_context);
             ExamSchedules = new ExamScheduleRepository(_context);
             SystemSettings = new GenericRepository<SystemSetting>(_context);
 

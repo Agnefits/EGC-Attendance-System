@@ -31,6 +31,26 @@ export default function HeadPermissions({ lang, user }) {
   const [toast, setToast] = useState(null);
   const [search, setSearch] = useState('');
 
+  const emptyCreateForm = { employeeId: '', type: 'morning', date: new Date().toISOString().slice(0, 10), duration: 60, reason: '' };
+  const [createOpen, setCreateOpen] = useState(false);
+  const [cForm, setCForm] = useState(emptyCreateForm);
+  const [saving, setSaving] = useState(false);
+
+  // Normalize backend field names (permissionType, durationMinutes, status)
+  // to the shape the rest of this component expects (type, duration, status).
+  const normalizePermission = (p) => ({
+    ...p,
+    id: p.id ?? p.Id ?? '',
+    employeeId: p.employeeId ?? p.EmployeeId ?? '',
+    employeeName: p.employeeName ?? p.EmployeeName ?? '',
+    department: p.department ?? p.Department ?? '',
+    type: String(p.type ?? p.permissionType ?? p.PermissionType ?? '').toLowerCase(),
+    status: String(p.status ?? p.Status ?? 'pending').toLowerCase(),
+    duration: Number(p.durationMinutes ?? p.DurationMinutes ?? p.duration ?? 0),
+    date: p.date ?? p.Date ?? '',
+    reason: p.reason ?? p.Reason ?? '',
+  });
+
   const loadData = useCallback(async () => {
     try {
       setLoading(true);
@@ -39,7 +59,7 @@ export default function HeadPermissions({ lang, user }) {
         employeesService.getEmployees().catch(() => []),
         structureService.getDepartments().catch(() => [])
       ]);
-      setPermissions(Array.isArray(permData) ? permData : []);
+      setPermissions((Array.isArray(permData) ? permData : []).map(normalizePermission));
       setEmployees(Array.isArray(empData) ? empData : []);
       setDepartments(Array.isArray(deptData) ? deptData : []);
     } catch (e) {
@@ -57,6 +77,30 @@ export default function HeadPermissions({ lang, user }) {
 
   function showToast(msg, type = 'success') { setToast({ msg, type }); setTimeout(() => setToast(null), 3000); }
   function closeModal() { setModal(null); setRejectMode(false); setRejectNote(''); }
+
+  function openCreate() { setCForm(emptyCreateForm); setCreateOpen(true); }
+  function closeCreate() { setCreateOpen(false); setCForm(emptyCreateForm); }
+
+  async function handleCreate() {
+    if (!cForm.employeeId) { showToast(lang === 'ar' ? 'اختر الموظف أولاً' : 'Select an employee', 'error'); return; }
+    if (!cForm.duration || Number(cForm.duration) <= 0) { showToast(lang === 'ar' ? 'المدة يجب أن تكون أكبر من صفر' : 'Duration must be greater than zero', 'error'); return; }
+    try {
+      setSaving(true);
+      await permissionsService.createForEmployee(cForm.employeeId, {
+        permissionType: cForm.type,
+        date: cForm.date,
+        durationMinutes: Number(cForm.duration),
+        reason: cForm.reason || '',
+      });
+      showToast(lang === 'ar' ? '✅ تم منح الإذن' : '✅ Permission granted');
+      closeCreate();
+      loadData();
+    } catch (e) {
+      showToast(e?.message || (lang === 'ar' ? 'فشل منح الإذن' : 'Failed to grant permission'), 'error');
+    } finally {
+      setSaving(false);
+    }
+  }
 
   const EMPLOYEES = employees;
 
@@ -96,7 +140,7 @@ const approvedList = permissions.filter(p => p.status === 'approved');
 const rejectedList = permissions.filter(p => p.status === 'rejected');
 
 const filtered = (activeTab === 'all' ? permissions : permissions.filter(p => p.status === activeTab))
-  .filter(p => { const e = EMPLOYEES.find(x => x.id === p.employeeId); return ((lang === 'en' ? e?.nameEn : e?.name) || '').toLowerCase().includes(search.toLowerCase()); });
+  .filter(p => { const e = EMPLOYEES.find(x => x.id === p.employeeId); return (((lang === 'en' ? e?.nameEn : e?.name) || p.employeeName) || '').toLowerCase().includes(search.toLowerCase()); });
 
 const thS = { background: '#F8FAFC', padding: '11px 14px', textAlign: 'center', fontWeight: '700', color: '#64748B', fontSize: '12px', borderBottom: '1.5px solid #E2E8F0', whiteSpace: 'nowrap', position: 'sticky', top: 0, zIndex: 1 };
 const tdS = (x = {}) => ({ padding: '11px 14px', borderBottom: '1px solid #F1F5F9', fontSize: '13px', textAlign: 'center', verticalAlign: 'middle', ...x });
@@ -148,7 +192,13 @@ return (
           onFocus={e => e.target.style.borderColor = '#1565C0'}
           onBlur={e => e.target.style.borderColor = '#E2E8F0'} />
       </div>
-      <span style={{ fontSize: '12px', color: '#94A3B8', fontWeight: '600' }}>{permissions.length} {lang === 'ar' ? 'طلب' : 'requests'}</span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+        <span style={{ fontSize: '12px', color: '#94A3B8', fontWeight: '600' }}>{permissions.length} {lang === 'ar' ? 'طلب' : 'requests'}</span>
+        <button onClick={openCreate}
+          style={{ background: 'linear-gradient(135deg,#1565C0,#1E88E5)', color: 'white', border: 'none', borderRadius: '10px', padding: '9px 16px', fontFamily: 'Cairo', fontSize: '13px', fontWeight: '800', cursor: 'pointer', boxShadow: '0 4px 12px rgba(21,101,192,.28)', whiteSpace: 'nowrap' }}>
+          + {lang === 'ar' ? 'منح إذن' : 'Grant permission'}
+        </button>
+      </div>
     </div>
     {/* ── Stats ── */}
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '12px', marginBottom: '20px' }}>
@@ -194,7 +244,8 @@ return (
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(280px,1fr))', gap: '14px' }}>
           {filtered.map((p, idx) => {
-            const emp = EMPLOYEES.find(e => e.id === p.employeeId);
+            const emp = EMPLOYEES.find(e => e.id === p.employeeId)
+              || { name: p.employeeName, nameEn: p.employeeName, email: '' };
             const pt = PERM_TYPES[p.type];
             const used = usedMins(p.employeeId);
             const rem = Math.max(0, MONTHLY_BUDGET - used);
@@ -288,7 +339,8 @@ return (
               </tr></thead>
               <tbody>
                 {filtered.map((p, idx) => {
-                  const emp = EMPLOYEES.find(e => e.id === p.employeeId);
+                  const emp = EMPLOYEES.find(e => e.id === p.employeeId)
+                    || { name: p.employeeName, nameEn: p.employeeName, email: '' };
                   const pt = PERM_TYPES[p.type];
                   const sm = STATUS_META[p.status];
                   const used = usedMins(p.employeeId);
@@ -327,7 +379,8 @@ return (
 
     {/* ── Modal ── */}
     {modal && (() => {
-      const emp = EMPLOYEES.find(e => e.id === modal.employeeId);
+      const emp = EMPLOYEES.find(e => e.id === modal.employeeId)
+        || { name: modal.employeeName, nameEn: modal.employeeName, email: '' };
       const pt = PERM_TYPES[modal.type];
       const used = usedMins(modal.employeeId);
       const rem = Math.max(0, MONTHLY_BUDGET - used);
@@ -432,6 +485,80 @@ return (
         </div>
       );
     })()}
+
+    {/* ── Create (grant) permission modal ── */}
+    {createOpen && (
+      <div onClick={closeCreate} style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.6)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>
+        <div onClick={e => e.stopPropagation()} style={{ background: 'white', borderRadius: '24px', width: '100%', maxWidth: '460px', overflow: 'hidden', boxShadow: '0 40px 100px rgba(0,0,0,.3)', direction: dir, fontFamily: 'Cairo,sans-serif', animation: 'popIn .28s cubic-bezier(.34,1.56,.64,1)' }}>
+
+          <div style={{ background: 'linear-gradient(135deg,#0D3B7A,#1565C0)', padding: '20px 22px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ fontSize: '17px', fontWeight: '900', color: 'white' }}>➕ {lang === 'ar' ? 'منح إذن لموظف' : 'Grant permission'}</div>
+            <button onClick={closeCreate}
+              style={{ width: '36px', height: '36px', borderRadius: '10px', border: 'none', background: 'rgba(255,255,255,.15)', cursor: 'pointer', color: 'white', fontSize: '16px' }}>✕</button>
+          </div>
+
+          <div style={{ padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            {/* Employee */}
+            <div>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>{lang === 'ar' ? 'الموظف' : 'Employee'}</label>
+              <select value={cForm.employeeId} onChange={e => setCForm(f => ({ ...f, employeeId: e.target.value }))}
+                style={{ width: '100%', padding: '10px 12px', border: '1.5px solid #E2E8F0', borderRadius: '10px', fontFamily: 'Cairo', fontSize: '13px', outline: 'none', background: 'white', boxSizing: 'border-box' }}>
+                <option value="">{lang === 'ar' ? '— اختر الموظف —' : '— Select employee —'}</option>
+                {EMPLOYEES.map(e => (
+                  <option key={e.id} value={e.id}>{lang === 'en' ? (e.nameEn || e.name) : (e.name || e.nameEn)}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Type */}
+            <div>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>{lang === 'ar' ? 'نوع الإذن' : 'Permission type'}</label>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                {Object.entries(PERM_TYPES).map(([key, t]) => (
+                  <button key={key} onClick={() => setCForm(f => ({ ...f, type: key }))}
+                    style={{ padding: '9px 10px', borderRadius: '10px', border: `1.5px solid ${cForm.type === key ? t.color : '#E2E8F0'}`, background: cForm.type === key ? t.bg : 'white', color: cForm.type === key ? t.color : '#475569', fontFamily: 'Cairo', fontSize: '12px', fontWeight: '800', cursor: 'pointer', textAlign: 'start' }}>
+                    {t.icon} {t.label[lang]}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Date + Duration */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>{lang === 'ar' ? 'التاريخ' : 'Date'}</label>
+                <input type="date" value={cForm.date} onChange={e => setCForm(f => ({ ...f, date: e.target.value }))}
+                  style={{ width: '100%', padding: '10px 12px', border: '1.5px solid #E2E8F0', borderRadius: '10px', fontFamily: 'Cairo', fontSize: '13px', outline: 'none', boxSizing: 'border-box' }} />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>{lang === 'ar' ? 'المدة (دقيقة)' : 'Duration (min)'}</label>
+                <input type="number" min="1" value={cForm.duration} onChange={e => setCForm(f => ({ ...f, duration: e.target.value }))}
+                  style={{ width: '100%', padding: '10px 12px', border: '1.5px solid #E2E8F0', borderRadius: '10px', fontFamily: 'Cairo', fontSize: '13px', outline: 'none', boxSizing: 'border-box' }} />
+              </div>
+            </div>
+
+            {/* Reason */}
+            <div>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>{lang === 'ar' ? 'السبب' : 'Reason'}</label>
+              <textarea value={cForm.reason} onChange={e => setCForm(f => ({ ...f, reason: e.target.value }))} rows={2}
+                placeholder={lang === 'ar' ? 'اختياري...' : 'Optional...'}
+                style={{ width: '100%', padding: '10px 12px', border: '1.5px solid #E2E8F0', borderRadius: '10px', fontFamily: 'Cairo', fontSize: '13px', outline: 'none', resize: 'none', boxSizing: 'border-box' }} />
+            </div>
+
+            <div style={{ display: 'flex', gap: '10px', marginTop: '4px' }}>
+              <button onClick={handleCreate} disabled={saving}
+                style={{ flex: 1, padding: '13px', background: saving ? '#94A3B8' : 'linear-gradient(135deg,#1565C0,#1E88E5)', color: 'white', border: 'none', borderRadius: '12px', fontSize: '14px', fontWeight: '800', cursor: saving ? 'not-allowed' : 'pointer', fontFamily: 'Cairo', boxShadow: '0 4px 14px rgba(21,101,192,.3)' }}>
+                {saving ? (lang === 'ar' ? 'جارٍ الحفظ...' : 'Saving...') : (lang === 'ar' ? 'منح الإذن' : 'Grant')}
+              </button>
+              <button onClick={closeCreate}
+                style={{ padding: '13px 18px', background: '#F1F5F9', color: '#475569', border: 'none', borderRadius: '12px', fontSize: '14px', fontWeight: '700', cursor: 'pointer', fontFamily: 'Cairo' }}>
+                {lang === 'ar' ? 'إلغاء' : 'Cancel'}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )}
   </div>
 );
 }

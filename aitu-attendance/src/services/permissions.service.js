@@ -16,6 +16,12 @@ export const permissionsService = {
     return res;
   },
 
+  // Manager (Head/Admin/Hr) grants a permission on behalf of an employee.
+  createForEmployee: async (employeeId, permData) => {
+    const res = await api.post('/permissions/request', { ...permData, employeeId });
+    return res;
+  },
+
   updatePermissionStatus: async (id, status, rejectionNote = null) => {
     const approved = status === 'approved';
     const res = await api.put(`/permissions/${id}/approve`, {

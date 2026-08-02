@@ -20,6 +20,7 @@ namespace Attendance_System.Data
         public DbSet<PermissionRequest> PermissionRequests => Set<PermissionRequest>();
         public DbSet<WorkSchedule> WorkSchedules => Set<WorkSchedule>();
         public DbSet<ScheduleAssignment> ScheduleAssignments => Set<ScheduleAssignment>();
+        public DbSet<ScheduleSession> ScheduleSessions => Set<ScheduleSession>();
         public DbSet<ExamSchedule> ExamSchedules => Set<ExamSchedule>();
         public DbSet<SystemSetting> SystemSettings => Set<SystemSetting>();
 
@@ -204,6 +205,22 @@ namespace Attendance_System.Data
                       .WithMany(e => e.ScheduleAssignments)
                       .HasForeignKey(sa => sa.EmployeeId)
                       .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            // ScheduleSession Configuration (personal weekly sessions)
+            modelBuilder.Entity<ScheduleSession>(entity =>
+            {
+                entity.HasKey(s => s.Id);
+                entity.Property(s => s.Subject).HasMaxLength(150).IsRequired();
+                entity.Property(s => s.GroupName).HasMaxLength(50);
+                entity.Property(s => s.Room).HasMaxLength(50);
+
+                entity.HasOne(s => s.Employee)
+                      .WithMany()
+                      .HasForeignKey(s => s.EmployeeId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasIndex(s => s.EmployeeId);
             });
 
             // ExamSchedule Configuration

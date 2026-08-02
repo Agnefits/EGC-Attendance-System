@@ -127,13 +127,34 @@ namespace Attendance_System.Controllers
         [AuthorizedRoles]
         public async Task<IActionResult> Create([FromBody] CreatePermissionRequestDto dto)
         {
-            var employeeId = GetCurrentEmployeeId();
-            if (string.IsNullOrEmpty(employeeId))
+            var currentEmployeeId = GetCurrentEmployeeId();
+            if (string.IsNullOrEmpty(currentEmployeeId))
                 return Unauthorized(new { success = false, message = "No employee linked to this account" });
 
-            var employee = await _unitOfWork.Employees.GetEmployeeWithDepartmentAndCollegeAsync(employeeId);
+            var role = User.FindFirst(ClaimTypes.Role)?.Value;
+            var canActForOthers = role == "Head" || role == "Admin" || role == "Hr";
+
+            // Default: the request belongs to the caller (self-request).
+            // A manager (Head/Admin/Hr) may instead target another employee.
+            var targetEmployeeId = currentEmployeeId;
+            var onBehalf = false;
+            if (canActForOthers && !string.IsNullOrEmpty(dto.EmployeeId) && dto.EmployeeId != currentEmployeeId)
+            {
+                targetEmployeeId = dto.EmployeeId;
+                onBehalf = true;
+            }
+
+            var employee = await _unitOfWork.Employees.GetEmployeeWithDepartmentAndCollegeAsync(targetEmployeeId);
             if (employee == null)
                 return BadRequest(new { success = false, message = "Employee not found" });
+
+            // A Head may only grant permissions to employees in their own department.
+            if (onBehalf && role == "Head")
+            {
+                var headDeptId = await _unitOfWork.Employees.GetDepartmentIdByEmployeeIdAsync(currentEmployeeId);
+                if (employee.DepartmentId != headDeptId)
+                    return StatusCode(403, new { success = false, message = "You can only grant permissions to employees in your own department" });
+            }
 
             if (dto.DurationMinutes <= 0)
                 return BadRequest(new { success = false, message = "Duration must be greater than zero" });
@@ -146,7 +167,7 @@ namespace Attendance_System.Controllers
             if (dto.PermissionType != PermissionType.Nursing)
             {
                 var (mStart, mEnd) = MonthPeriod(date);
-                var used = await _unitOfWork.PermissionRequests.GetUsedMinutesByEmployeeAndDateRangeExcludingNursingAsync(employeeId, mStart, mEnd);
+                var used = await _unitOfWork.PermissionRequests.GetUsedMinutesByEmployeeAndDateRangeExcludingNursingAsync(targetEmployeeId, mStart, mEnd);
 
                 if (used + dto.DurationMinutes > MonthlyBudgetMinutes)
                     return BadRequest(new
@@ -159,12 +180,15 @@ namespace Attendance_System.Controllers
             var request = new PermissionRequest
             {
                 Id = Guid.NewGuid().ToString(),
-                EmployeeId = employeeId,
+                EmployeeId = targetEmployeeId,
                 PermissionType = dto.PermissionType,
                 Date = date,
                 DurationMinutes = dto.DurationMinutes,
                 Reason = dto.Reason,
-                Status = LeaveStatus.Pending,
+                // Manager-granted permissions are approved immediately (the manager is the
+                // authority); ordinary self-requests still start as Pending for review.
+                Status = onBehalf ? LeaveStatus.Approved : LeaveStatus.Pending,
+                ApprovedBy = onBehalf ? currentEmployeeId : null,
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow
             };
@@ -175,7 +199,7 @@ namespace Attendance_System.Controllers
             return Ok(new
             {
                 success = true,
-                message = "Permission request submitted successfully",
+                message = onBehalf ? "Permission granted successfully" : "Permission request submitted successfully",
                 data = new { request.Id, request.Status }
             });
         }
