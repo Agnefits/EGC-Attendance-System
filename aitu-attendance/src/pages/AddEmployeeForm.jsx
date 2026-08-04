@@ -25,6 +25,15 @@ const ROLES = [
   { v:'dean',            icon:'🏛️', ar:'عميد كلية',             en:'Dean'           },
 ];
 
+// System login role (authorization) — independent from the job classification above.
+// e.g. an Academic-classified employee can still be granted the Admin system role.
+const SYSTEM_ROLES = [
+  { v:'employee', icon:'👤', ar:'موظف',        en:'Employee' },
+  { v:'head',     icon:'👑', ar:'رئيس قسم',     en:'Head'     },
+  { v:'hr',       icon:'🗂️', ar:'موارد بشرية',  en:'HR'       },
+  { v:'admin',    icon:'🛡️', ar:'مدير النظام', en:'Admin'    },
+];
+
 /* ── Shared styles ───────────────────────────────────────────── */
 const inputBase = (hasError) => ({
   width:'100%', padding:'8px 11px',
@@ -64,7 +73,7 @@ function SectionTitle({ icon, title }) {
 }
 
 const emptyForm = {
-  name:'', nameEn:'', email:'', phone:'',
+  name:'', nameEn:'', email:'', phone:'', password:'', systemRole:'employee',
   gender:'male', role:'academic', academicRank:'',
   collegeId:'', departmentId:'', adminDepartmentId:'', headType:'academic',
 };
@@ -93,6 +102,8 @@ export default function AddEmployeeForm({ lang, onSave, onCancel, colleges = [],
     if (!form.nameEn) e.nameEn = ar?'الاسم الإنجليزي مطلوب':'English name required';
     if (!form.email)  e.email  = ar?'البريد مطلوب':'Email required';
     if (!form.phone)  e.phone  = ar?'الهاتف مطلوب':'Phone required';
+    if (!form.password) e.password = ar?'كلمة المرور مطلوبة':'Password required';
+    else if (form.password.length < 6) e.password = ar?'6 أحرف على الأقل':'At least 6 characters';
     
     if (form.role === 'academic') {
       if (!form.collegeId)    e.collegeId    = ar?'الكلية مطلوبة':'College required';
@@ -212,6 +223,12 @@ export default function AddEmployeeForm({ lang, onSave, onCancel, colleges = [],
             </Field>
           </div>
 
+          <Field label={ar?'كلمة المرور (لتسجيل الدخول)':'Password (for login)'} required error={errors.password}
+            hint={ar?'سيدخل بها الموظف مع بريده الإلكتروني':'Employee will use this with their email to log in'}>
+            <input data-k="password" type="password" value={form.password} onChange={e=>setForm(p=>({...p,password:e.target.value}))} onFocus={F} onBlur={B}
+              style={{...inputBase(errors.password),direction:'ltr'}} placeholder={ar?'6 أحرف على الأقل':'At least 6 characters'}/>
+          </Field>
+
           {/* Gender */}
           <Field label={ar?'الجنس':'Gender'}>
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
@@ -223,6 +240,30 @@ export default function AddEmployeeForm({ lang, onSave, onCancel, colleges = [],
                       background:sel?(g.v==='male'?'linear-gradient(135deg,#1565C0,#1E88E5)':'linear-gradient(135deg,#BE185D,#EC4899)'):'white',
                       color:sel?'white':'#475569', boxShadow:sel?`0 4px 12px rgba(${g.v==='male'?'21,101,192':'190,24,93'},.25)`:'none', transition:'all .18s' }}>
                     {g.icon} {g.l[lang]}
+                  </button>
+                );
+              })}
+            </div>
+          </Field>
+
+          {/* System login role (separate from job classification below) */}
+          <Field label={ar?'صلاحية الدخول للنظام':'System Access Role'} required
+            hint={ar?'ده اللي بيحدد إيه اللي الموظف يقدر يشوفه/يعمله في النظام':'Determines what the employee can see/do in the system'}>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
+              {SYSTEM_ROLES.map(sr=>{
+                const sel = form.systemRole===sr.v;
+                return(
+                  <button key={sr.v} onClick={()=>setForm(p=>({...p,systemRole:sr.v}))}
+                    onMouseEnter={e=>{ if(!sel) e.currentTarget.style.borderColor='#93C5FD'; }}
+                    onMouseLeave={e=>{ if(!sel) e.currentTarget.style.borderColor='#E2E8F0'; }}
+                    style={{ display:'flex', alignItems:'center', gap:'8px', textAlign:'start', padding:'8px 11px', borderRadius:'10px', cursor:'pointer', fontFamily:'Cairo',
+                      border: sel ? '1.5px solid #1565C0' : '1.5px solid #E2E8F0',
+                      background: sel ? '#EFF6FF' : 'white',
+                      boxShadow: sel ? '0 4px 12px rgba(21,101,192,.14)' : 'none',
+                      transition:'all .18s' }}>
+                    <span style={{ fontSize:'16px', flexShrink:0 }}>{sr.icon}</span>
+                    <span style={{ fontSize:'12px', fontWeight:'800', color: sel ? '#0D3B7A' : '#0F172A' }}>{ar?sr.ar:sr.en}</span>
+                    {sel && <span style={{ marginInlineStart:'auto', color:'#1565C0', fontWeight:'800', fontSize:'12px' }}>✓</span>}
                   </button>
                 );
               })}

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { employeesService, structureService } from '../services';
+import api from '../services/api';
 import AddEmployeeForm from './AddEmployeeForm';
 
 const ADMIN_DEPTS = [
@@ -1132,6 +1133,26 @@ function Employees({ lang, user, showFormDefault }) {
               const res = await employeesService.createEmployee(payload);
               const created = res?.data || { ...payload, id: 'EMP' + Date.now(), status: 'active' };
               setEmployees(prev => [...prev, created]);
+
+              // Attach a login account so the employee can sign in with the same
+              // email/password the admin just entered (separate endpoint on the backend).
+              try {
+                await api.post('/users', {
+                  employeeId: created.id,
+                  email: empData.email,
+                  password: empData.password,
+                  role: empData.systemRole || 'employee',
+                });
+              } catch (userErr) {
+                console.error('Create login account failed', userErr);
+                alert(
+                  (lang === 'ar'
+                    ? 'اتضاف الموظف بنجاح، لكن حصل خطأ في إنشاء حساب الدخول: '
+                    : 'Employee created, but creating the login account failed: ')
+                  + (userErr.message || '')
+                );
+              }
+
               closeAdd();
             } catch (err) {
               console.error('Create employee failed', err);

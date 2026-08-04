@@ -19,6 +19,47 @@ namespace Attendance_System.Controllers
             _unitOfWork = unitOfWork;
         }
 
+        // POST /api/users — attaches a new login account to an existing employee.
+        // Employee records are added separately via Employees > "إضافة موظف" (no login access
+        // on their own); this is the deliberate follow-up step to grant one.
+        [HttpPost]
+        [AuthorizedRoles(UserRole.Admin)]
+        public async Task<IActionResult> Create([FromBody] CreateUserDto dto)
+        {
+            var employee = await _unitOfWork.Employees.GetByIdAsync(dto.EmployeeId);
+            if (employee == null)
+                return BadRequest(new { success = false, message = "Employee not found" });
+
+            var existingAccount = await _unitOfWork.Users.GetByEmployeeIdAsync(dto.EmployeeId);
+            if (existingAccount != null)
+                return BadRequest(new { success = false, message = "This employee already has a login account" });
+
+            var emailExists = await _unitOfWork.Users.ExistsByEmailAsync(dto.Email);
+            if (emailExists)
+                return BadRequest(new { success = false, message = "Email is already taken" });
+
+            var user = new User
+            {
+                EmployeeId = dto.EmployeeId,
+                Email = dto.Email,
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password),
+                Role = dto.Role,
+                IsActive = true,
+                CreatedAt = DateTime.Now,
+                UpdatedAt = DateTime.Now
+            };
+
+            await _unitOfWork.Users.AddAsync(user);
+            await _unitOfWork.CompleteAsync();
+
+            return Ok(new
+            {
+                success = true,
+                message = "Login account created successfully",
+                data = new { user.Id, user.Email, user.Role, EmployeeId = user.EmployeeId }
+            });
+        }
+
         [HttpGet]
         public async Task<IActionResult> GetAll(
             [FromQuery] UserRole? role,
