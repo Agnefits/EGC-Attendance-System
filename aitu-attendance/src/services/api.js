@@ -1,5 +1,12 @@
 const BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5122/api';
 
+// Exposed so other modules (e.g. file/image uploads that can't go through apiFetch's
+// JSON-only body handling) can build request URLs themselves.
+export const API_BASE_URL = BASE_URL;
+// Origin without the trailing /api -- needed to resolve relative paths returned by the
+// server for static assets (e.g. uploaded profile photos at "/uploads/avatars/...").
+export const API_ORIGIN = BASE_URL.replace(/\/api\/?$/, '');
+
 export function getToken() {
   return localStorage.getItem('aitu_token');
 }
@@ -37,7 +44,7 @@ export function clearAuth() {
 
 async function apiFetch(method, path, body = null, params = null) {
   const url = new URL(`${BASE_URL}${path.startsWith('/') ? path : '/' + path}`);
-  
+
   if (params) {
     Object.keys(params).forEach(key => {
       if (params[key] !== undefined && params[key] !== null && params[key] !== '') {
@@ -66,7 +73,7 @@ async function apiFetch(method, path, body = null, params = null) {
 
   try {
     const response = await fetch(url.toString(), options);
-    
+
     if (response.status === 401) {
       clearAuth();
       // Optional: trigger window reload or custom event if needed

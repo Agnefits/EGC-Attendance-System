@@ -4,6 +4,7 @@ using Attendance_System.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Attendance_System.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260807195847_AddPasswordResetOtp")]
+    partial class AddPasswordResetOtp
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -257,8 +260,7 @@ namespace Attendance_System.Migrations
                     b.HasIndex("DepartmentId");
 
                     b.HasIndex("Email")
-                        .IsUnique()
-                        .HasFilter("[DeletedAt] IS NULL");
+                        .IsUnique();
 
                     b.ToTable("Employees");
                 });
@@ -605,8 +607,7 @@ namespace Attendance_System.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("Email")
-                        .IsUnique()
-                        .HasFilter("[DeletedAt] IS NULL");
+                        .IsUnique();
 
                     b.HasIndex("EmployeeId")
                         .IsUnique()

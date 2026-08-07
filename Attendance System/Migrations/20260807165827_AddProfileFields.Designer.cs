@@ -4,6 +4,7 @@ using Attendance_System.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Attendance_System.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260807165827_AddProfileFields")]
+    partial class AddProfileFields
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -257,8 +260,7 @@ namespace Attendance_System.Migrations
                     b.HasIndex("DepartmentId");
 
                     b.HasIndex("Email")
-                        .IsUnique()
-                        .HasFilter("[DeletedAt] IS NULL");
+                        .IsUnique();
 
                     b.ToTable("Employees");
                 });
@@ -588,12 +590,6 @@ namespace Attendance_System.Migrations
                         .HasMaxLength(255)
                         .HasColumnType("nvarchar(255)");
 
-                    b.Property<string>("ResetOtp")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<DateTime?>("ResetOtpExpiresAt")
-                        .HasColumnType("datetime2");
-
                     b.Property<string>("Role")
                         .IsRequired()
                         .HasMaxLength(30)
@@ -605,8 +601,7 @@ namespace Attendance_System.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("Email")
-                        .IsUnique()
-                        .HasFilter("[DeletedAt] IS NULL");
+                        .IsUnique();
 
                     b.HasIndex("EmployeeId")
                         .IsUnique()

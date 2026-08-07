@@ -153,6 +153,9 @@ namespace Attendance_System
             // CORS must run before authentication/authorization.
             app.UseCors("frontend");
 
+            // Serves wwwroot/* over HTTP (e.g. uploaded avatars at /uploads/avatars/...).
+            app.UseStaticFiles();
+
             if (!app.Environment.IsDevelopment())
             {
                 app.UseHttpsRedirection();

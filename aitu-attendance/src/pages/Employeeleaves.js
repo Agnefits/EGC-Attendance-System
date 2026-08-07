@@ -180,6 +180,8 @@ function EmployeeLeaves({ lang, user }) {
       grantedByAdmin: false,
       editId,
     });
+    if (valErr) { setFormError(valErr); return; }
+
     try {
       await leavesService.submitLeaveRequest({
         leaveTypeId: lt.id,
@@ -566,7 +568,7 @@ return (
                 <span style={{ fontSize: '22px' }}>{pt.icon}</span>
                 <div>
                   <div style={{ fontSize: '14px', fontWeight: '800', color: pt.color }}>
-                    {previewDays} {lang === 'ar' ? 'يوم' : 'days'} — {lang === 'ar' ? 'موافق عليها تلقائياً' : 'pending approval'}
+                    {previewDays} {lang === 'ar' ? 'يوم' : 'days'} — {lang === 'ar' ? 'بانتظار الموافقة' : 'pending approval'}
                   </div>
                   <div style={{ fontSize: '11px', color: '#94A3B8', marginTop: '2px' }}>
                     {form.from} ← {form.to}

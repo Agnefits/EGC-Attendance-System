@@ -22,7 +22,8 @@ namespace Attendance_System.Controllers
         private const double DefaultCampusLat = 27.184187;
         private const double DefaultCampusLng = 31.172920;
         private const double DefaultCampusRadius = 500;
-        private const double MaxAccuracyMargin = 200;
+        // No extra allowance for GPS/network inaccuracy — the campus radius is the hard limit.
+        private const double MaxAccuracyMargin = 0;
 
         public AttendanceController(IUnitOfWork unitOfWork)
         {

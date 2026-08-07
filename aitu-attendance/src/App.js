@@ -18,6 +18,8 @@ import HRDashboard from './pages/HrDashboard';
 import HrAttendance from './pages/HrAttendance';
 import HeadLeaves from './pages/Headleaves';
 import HeadPermissions from './pages/Headpermissions';
+import Profile from './pages/Profile';
+import ForceChangePassword from './components/ForceChangePassword';
 import { authService } from './services';
 
 const translations = {
@@ -59,6 +61,7 @@ const translations = {
     role_head: 'رئيس القسم',
     role_manager: 'مدير قسم',
     role_employee: 'موظف',
+    profile: 'بروفايلي',
   },
   en: {
     dir: 'ltr',
@@ -98,6 +101,7 @@ const translations = {
     role_head: 'Department Head',
     role_manager: 'Department Manager',
     role_employee: 'Employee',
+    profile: 'My Profile',
   }
 };
 
@@ -140,6 +144,18 @@ function App() {
     return <LoginPage onLogin={handleLogin} lang={lang} setLang={setLang} t={t} />;
   }
 
+  if (user.mustChangePassword) {
+    return (
+      <ForceChangePassword
+        user={user}
+        lang={lang}
+        setLang={setLang}
+        onLogout={handleLogout}
+        onDone={() => setUser(p => ({ ...p, mustChangePassword: false }))}
+      />
+    );
+  }
+
   return (
     <div className="app" dir={t.dir}>
       <Header lang={lang} setLang={setLang} t={t} user={user} onLogout={handleLogout} />
@@ -166,6 +182,7 @@ function App() {
           {activePage === 'headPermissions' && <HeadPermissions lang={lang} user={user} />}
           {activePage === 'reports' && <Reports t={t} lang={lang} user={user} />}
           {activePage === 'structure' && <Structure lang={lang} t={t} />}
+          {activePage === 'profile' && <Profile lang={lang} user={user} />}
         </div>
       </div>
     </div>

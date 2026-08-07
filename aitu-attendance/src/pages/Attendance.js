@@ -148,8 +148,7 @@ function Attendance({ t, lang, user }) {
       setDistance(Math.round(dist));
       setGpsMethod(method);
 
-      const margin = Math.min(accuracy || 0, 200);
-      const allowedRadius = CAMPUS_RADIUS + margin;
+      const allowedRadius = CAMPUS_RADIUS;
 
       if (dist > allowedRadius) {
         setGpsState('error');

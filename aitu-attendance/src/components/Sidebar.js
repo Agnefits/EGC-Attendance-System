@@ -16,6 +16,7 @@ function Sidebar({ activePage, setActivePage, t, role, lang }) {
     { id:'headLeaves',      label:{ar:'إجازات القسم',          en:'Dept Leaves'},        icon:'calendar', roles:['head'] },
     { id:'headPermissions', label:{ar:'أذونات القسم',          en:'Dept Permissions'},   icon:'key',      roles:['head'] },
     { id:'reports',         label:{ar:'التقارير والإحصاء',     en:'Reports'},            icon:'chart',    roles:['admin','head','hr'] },
+    { id:'profile',         label:{ar:'بروفايلي',              en:'My Profile'},         icon:'profile',  roles:['admin','head','employee','hr'] },
   ];
 
   const pages = allPages.filter(p=>p.roles.includes(role));
@@ -29,6 +30,7 @@ function Sidebar({ activePage, setActivePage, t, role, lang }) {
     key:      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>,
     user_clock: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="7" r="4"/><path d="M3 21v-2a4 4 0 0 1 4-4h2"/><circle cx="19" cy="17" r="3"/><polyline points="19 15 19 17 21 17"/></svg>,
     chart:    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/><line x1="2" y1="20" x2="22" y2="20"/></svg>,
+    profile:  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>,
   };
 
   const roleLabel = {

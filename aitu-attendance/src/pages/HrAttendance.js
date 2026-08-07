@@ -129,7 +129,7 @@ export default function HrAttendance({ lang, readOnly = false }) {
   const filteredAtt = useMemo(() => ATTENDANCE.filter(a =>
     deptFilter(a) && empFilter(a) && dateFilter(a) &&
     (filterStatus === 'all' || a.status === filterStatus)
-  ), [filterDept, selectedEmps, filterStatus, dateFrom, dateTo]);
+  ), [ATTENDANCE, filterDept, selectedEmps, filterStatus, dateFrom, dateTo]);
 
   const filteredPerm = useMemo(() => permissions.filter(p =>
     deptFilter(p) && empFilter(p) && dateFilter(p)
@@ -138,7 +138,7 @@ export default function HrAttendance({ lang, readOnly = false }) {
   const filteredLeaves = useMemo(() => LEAVES.filter(l =>
     deptFilter(l) && empFilter(l) && dateFilter({ ...l, date: l.from }) &&
     (filterLeaveType === 'all' || l.type === filterLeaveType)
-  ), [filterDept, selectedEmps, filterLeaveType, dateFrom, dateTo]);
+  ), [LEAVES, filterDept, selectedEmps, filterLeaveType, dateFrom, dateTo]);
 
   const stats = useMemo(() => ({
     total: filteredAtt.length,
@@ -433,9 +433,14 @@ export default function HrAttendance({ lang, readOnly = false }) {
                     const emp = EMPLOYEES.find(e => e.id === a.employeeId);
                     const dept = DEPARTMENTS.find(d => d.id === emp?.departmentId);
                     const sm = STATUS_META[a.status];
+                    // Fall back to the name/department already returned on the attendance
+                    // record itself (e.g. the Admin account is deliberately excluded from
+                    // the employees list, so its own record wouldn't resolve otherwise).
+                    const displayName = (lang === 'en' ? emp?.nameEn : emp?.name) || a.employeeName || '—';
+                    const displayDept = (lang === 'en' ? dept?.nameEn : dept?.name) || a.department || '—';
                     return (<tr key={a.id} style={{ background: idx % 2 === 0 ? 'white' : '#FAFBFC', transition: 'background .15s' }} onMouseEnter={e => e.currentTarget.style.background = '#EFF6FF'} onMouseLeave={e => e.currentTarget.style.background = idx % 2 === 0 ? 'white' : '#FAFBFC'}>
-                      <td style={tdS({ textAlign: lang === 'ar' ? 'right' : 'left' })}><div style={{ fontWeight: '700', color: '#0F172A' }}>{lang === 'en' ? emp?.nameEn : emp?.name}</div><div style={{ fontSize: '11px', color: '#94A3B8' }}>{emp?.email}</div></td>
-                      <td style={tdS({ color: '#64748B', fontSize: '13px' })}>{lang === 'en' ? dept?.nameEn : dept?.name}</td>
+                      <td style={tdS({ textAlign: lang === 'ar' ? 'right' : 'left' })}><div style={{ fontWeight: '700', color: '#0F172A' }}>{displayName}</div><div style={{ fontSize: '11px', color: '#94A3B8' }}>{emp?.email}</div></td>
+                      <td style={tdS({ color: '#64748B', fontSize: '13px' })}>{displayDept}</td>
                       <td style={tdS({ direction: 'ltr', color: '#64748B' })}>{a.date}</td>
                       <td style={tdS({ direction: 'ltr', color: '#14532D', fontWeight: '700' })}>{a.checkIn || '—'}</td>
                       <td style={tdS({ direction: 'ltr', color: '#1565C0', fontWeight: '700' })}>{a.checkOut || '—'}</td>

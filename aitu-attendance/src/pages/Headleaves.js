@@ -32,6 +32,28 @@ export default function HeadLeaves({ lang, user }) {
   const [toast, setToast] = useState(null);
   const [search, setSearch] = useState('');
 
+  // Normalize backend field names (PascalCase/camelCase DTO fields) to what this component reads.
+  function normalizeLeave(l) {
+    const statusRaw = l.status ?? l.Status;
+    let status = 'pending';
+    if (statusRaw === 1 || statusRaw === '1' || String(statusRaw).toLowerCase() === 'approved') status = 'approved';
+    else if (statusRaw === 2 || statusRaw === '2' || String(statusRaw).toLowerCase() === 'rejected') status = 'rejected';
+    else if (statusRaw === 0 || statusRaw === '0' || String(statusRaw).toLowerCase() === 'pending') status = 'pending';
+    else status = String(statusRaw || 'pending').toLowerCase();
+    return {
+      ...l,
+      id: l.id ?? l.Id ?? '',
+      employeeId: l.employeeId ?? l.EmployeeId ?? '',
+      type: l.type ?? l.leaveTypeId ?? l.LeaveTypeId ?? l.leaveType ?? l.LeaveType ?? '',
+      from: l.from ?? l.fromDate ?? l.FromDate ?? '',
+      to: l.to ?? l.toDate ?? l.ToDate ?? '',
+      days: l.days ?? l.daysCount ?? l.DaysCount ?? 0,
+      status,
+      reason: l.reason ?? l.Reason ?? '',
+      rejectNote: l.rejectNote ?? l.rejectionNote ?? l.RejectionNote ?? '',
+    };
+  }
+
   const loadData = useCallback(async () => {
     try {
       setLoading(true);
@@ -40,7 +62,7 @@ export default function HeadLeaves({ lang, user }) {
         employeesService.getEmployees().catch(() => []),
         structureService.getDepartments().catch(() => [])
       ]);
-      setLeaves(Array.isArray(leaveData) ? leaveData : []);
+      setLeaves(Array.isArray(leaveData) ? leaveData.map(normalizeLeave) : []);
       setEmployees(Array.isArray(empData) ? empData : []);
       setDepartments(Array.isArray(deptData) ? deptData : []);
     } catch (e) {
@@ -84,7 +106,6 @@ export default function HeadLeaves({ lang, user }) {
       showToast(e.message || 'Action failed', 'error');
     }
   }
-  const reject = handleReject;
 
   function getBalance(empId, typeId, days) {
     if (!days) return null;
@@ -405,7 +426,7 @@ export default function HeadLeaves({ lang, user }) {
                   </div>
                 ) : (
                   <div style={{ display: 'flex', gap: '10px' }}>
-                    <button onClick={reject} disabled={!rejectNote.trim()}
+                    <button onClick={() => handleReject(modal.id)} disabled={!rejectNote.trim()}
                       style={{ flex: 1, padding: '13px', background: rejectNote.trim() ? '#991B1B' : '#E2E8F0', color: rejectNote.trim() ? 'white' : '#94A3B8', border: 'none', borderRadius: '12px', fontSize: '14px', fontWeight: '700', cursor: rejectNote.trim() ? 'pointer' : 'not-allowed', fontFamily: 'Cairo', transition: 'all .18s', boxShadow: rejectNote.trim() ? '0 4px 12px rgba(153,27,27,.3)' : 'none' }}>
                       {lang === 'ar' ? 'تأكيد الرفض' : 'Confirm Reject'}
                     </button>

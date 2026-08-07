@@ -19,6 +19,8 @@ namespace Attendance_System.Models
         public string? CollegeId { get; set; }
         public string? HeadType { get; set; }
         public string Status { get; set; } = "active";
+        // Relative URL (e.g. "/uploads/avatars/xxx.jpg"), served as a static file.
+        public string? PhotoUrl { get; set; }
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
         public DateTime? DeletedAt { get; set; }
