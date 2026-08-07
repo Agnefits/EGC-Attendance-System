@@ -66,7 +66,11 @@ namespace Attendance_System.Data
             {
                 entity.HasKey(u => u.Id);
                 entity.Property(u => u.Email).HasMaxLength(150).IsRequired();
-                entity.HasIndex(u => u.Email).IsUnique();
+                // Filtered unique index: only enforced among non-deleted users,
+                // so an email freed up by a soft-deleted user can be reused.
+                entity.HasIndex(u => u.Email)
+                      .IsUnique()
+                      .HasFilter("[DeletedAt] IS NULL");
                 entity.Property(u => u.PasswordHash).HasMaxLength(255).IsRequired();
                 entity.Property(u => u.Role).HasConversion<string>().HasMaxLength(30);
 
@@ -84,7 +88,11 @@ namespace Attendance_System.Data
                 entity.Property(e => e.Name).HasMaxLength(150).IsRequired();
                 entity.Property(e => e.NameEn).HasMaxLength(150).IsRequired();
                 entity.Property(e => e.Email).HasMaxLength(150).IsRequired();
-                entity.HasIndex(e => e.Email).IsUnique();
+                // Filtered unique index: only enforced among non-deleted employees,
+                // so an email freed up by a soft-deleted employee can be reused.
+                entity.HasIndex(e => e.Email)
+                      .IsUnique()
+                      .HasFilter("[DeletedAt] IS NULL");
                 entity.Property(e => e.Phone).HasMaxLength(30).IsRequired();
                 entity.Property(e => e.Gender).HasConversion<string>().HasMaxLength(10);
                 entity.Property(e => e.RoleClassification).HasConversion<string>().HasMaxLength(30);

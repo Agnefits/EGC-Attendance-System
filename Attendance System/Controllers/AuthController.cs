@@ -9,7 +9,7 @@ using Attendance_System.Enums;
 using Attendance_System.Services;
 using Attendance_System.Middleware;
 using Attendance_System.UnitOfWork;
-using Attendance_System.Dtos;
+using Attendance_System.DTOs.Auth;
 using Microsoft.AspNetCore.Authorization;
 
 namespace Attendance_System.Controllers
@@ -39,15 +39,15 @@ namespace Attendance_System.Controllers
             var user = await _unitOfWork.Users.Query()
                 .Include(u => u.Employee).ThenInclude(e => e!.Department)
                 .Include(u => u.Employee).ThenInclude(e => e!.College)
-                .FirstOrDefaultAsync(u => u.Email == dto.Email);
+                .FirstOrDefaultAsync(u => u.Email == dto.Email && u.DeletedAt == null);
 
             if (user == null)
-                return Unauthorized(new { success = false, message = "Invalid email" });
+                return Unauthorized(new { success = false, message = "Invalid email or password" });
 
             if (!BCrypt.Net.BCrypt.Verify(dto.Password, user.PasswordHash))
-                return Unauthorized(new { success = false, message = "Invalid password" });
+                return Unauthorized(new { success = false, message = "Invalid email or password" });
 
-            if (!user.IsActive || user.DeletedAt != null)
+            if (!user.IsActive)
                 return Unauthorized(new { success = false, message = "Account is inactive, please contact administration" });
 
             user.LastLoginAt = DateTime.Now;
@@ -61,7 +61,7 @@ namespace Attendance_System.Controllers
             {
                 success = true,
                 message = "Login successful",
-                data = new LoginResponseDto
+                data = new AuthResponseDto
                 {
                     Token = token,
                     UserId = user.Id,
@@ -80,11 +80,13 @@ namespace Attendance_System.Controllers
         [AuthorizedRoles(UserRole.Admin)]
         public async Task<IActionResult> Register([FromBody] RegisterDto dto)
         {
-            var userEmailExists = await _unitOfWork.Users.ExistsByEmailAsync(dto.Email);
+            var userEmailExists = await _unitOfWork.Users.Query()
+                .AnyAsync(u => u.Email == dto.Email && u.DeletedAt == null);
             if (userEmailExists)
                 return BadRequest(new { success = false, message = "Email is already registered" });
 
-            var employeeEmailExists = await _unitOfWork.Employees.Query().AnyAsync(e => e.Email == dto.Email);
+            var employeeEmailExists = await _unitOfWork.Employees.Query()
+                .AnyAsync(e => e.Email == dto.Email && e.DeletedAt == null);
             if (employeeEmailExists)
                 return BadRequest(new { success = false, message = "Employee email already exists" });
 
@@ -130,14 +132,15 @@ namespace Attendance_System.Controllers
             {
                 success = true,
                 message = "Registration successful",
-                data = new RegisterResponseDto { UserId = user.Id, EmployeeId = employee.Id }
+                data = new { UserId = user.Id, EmployeeId = employee.Id }
             });
         }
 
         [HttpPost("change-password")]
         public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordDto dto)
         {
-            var user = await _unitOfWork.Users.GetByIdAsync(dto.UserId);
+            var user = await _unitOfWork.Users.Query()
+                .FirstOrDefaultAsync(u => u.Id == dto.UserId && u.DeletedAt == null);
             if (user == null)
                 return NotFound(new { success = false, message = "User not found" });
 
@@ -169,27 +172,27 @@ namespace Attendance_System.Controllers
             var user = await _unitOfWork.Users.Query()
                 .Include(u => u.Employee).ThenInclude(e => e!.Department)
                 .Include(u => u.Employee).ThenInclude(e => e!.College)
-                .Where(u => u.Id == userId)
-                .Select(u => new CurrentUserDto
+                .Where(u => u.Id == userId && u.DeletedAt == null)
+                .Select(u => new
                 {
-                    Id = u.Id,
-                    Email = u.Email,
-                    Role = u.Role,
-                    IsActive = u.IsActive,
-                    CreatedAt = u.CreatedAt,
-                    LastLoginAt = u.LastLoginAt,
-                    Employee = u.Employee != null ? new CurrentUserEmployeeDto
+                    u.Id,
+                    u.Email,
+                    u.Role,
+                    u.IsActive,
+                    u.CreatedAt,
+                    u.LastLoginAt,
+                    Employee = u.Employee != null ? new
                     {
-                        Id = u.Employee.Id,
-                        Name = u.Employee.Name,
-                        NameEn = u.Employee.NameEn,
-                        Phone = u.Employee.Phone,
-                        Gender = u.Employee.Gender,
-                        DepartmentId = u.Employee.DepartmentId,
+                        u.Employee.Id,
+                        u.Employee.Name,
+                        u.Employee.NameEn,
+                        u.Employee.Phone,
+                        u.Employee.Gender,
+                        u.Employee.DepartmentId,
                         Department = u.Employee.Department != null ? u.Employee.Department.Name : null,
                         College = u.Employee.College != null ? u.Employee.College.Name : null,
-                        Type = u.Employee.Type,
-                        RoleClassification = u.Employee.RoleClassification
+                        u.Employee.Type,
+                        u.Employee.RoleClassification
                     } : null
                 })
                 .FirstOrDefaultAsync();
@@ -209,7 +212,7 @@ namespace Attendance_System.Controllers
         private long? GetCurrentUserId()
         {
             var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            return userIdClaim != null && long.TryParse(userIdClaim, out var id) ? id : (long?)null;
+            return userIdClaim != null && long.TryParse(userIdClaim, out var id) ? id : null;
         }
     }
 }

@@ -51,7 +51,7 @@ function Field({ label, error, children }) {
 }
 
 /* ── FormBody — shared between Add & Edit ── */
-function FormBody({ form, setForm, errors, setErrors, iStyle, lang, COLLEGES=[], DEPARTMENTS=[], ADMIN_DEPTS=[] }) {
+function FormBody({ form, setForm, errors, setErrors, iStyle, lang, COLLEGES=[], DEPARTMENTS=[], ADMIN_DEPTS=[], showPassword = false }) {
   // Backend returns deptType as integer: 1=Academic, 2=Administrative
   const isAdminDept = d =>
     d.deptType === 2 || d.deptType === '2' ||
@@ -92,6 +92,36 @@ function FormBody({ form, setForm, errors, setErrors, iStyle, lang, COLLEGES=[],
           onChange={e=>{ setForm({...form,phone:e.target.value}); setErrors(p=>({...p,phone:''})); }} style={inp('phone',{direction:'ltr'})} />
       </Field>
 
+      {/* ── حقل كلمة المرور (يظهر في التعديل) ── */}
+      {showPassword && (
+        <div style={{ gridColumn: '1 / -1' }}>
+          <Field label={`${lang === 'ar' ? 'كلمة المرور (تسجيل الدخول)' : 'Password (Login)'}`} error={errors.password}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <input
+                type="password"
+                placeholder={lang === 'ar' ? 'كلمة المرور الجديدة (اختياري)' : 'New password (optional)'}
+                value={form.password || ''}
+                onChange={e => {
+                  setForm({ ...form, password: e.target.value });
+                  setErrors(p => ({ ...p, password: '' }));
+                }}
+                style={inp('password')}
+              />
+              {form.password && form.password.length > 0 && (
+                <span style={{ fontSize: '11px', color: '#16A34A', fontWeight: '700', whiteSpace: 'nowrap' }}>
+                  ✅ {lang === 'ar' ? 'سيتم تحديثها' : 'Will be updated'}
+                </span>
+              )}
+            </div>
+            <div style={{ fontSize: '11px', color: '#94A3B8', marginTop: '4px' }}>
+              {lang === 'ar'
+                ? 'اتركها فارغة إذا كنت لا تريد تغيير كلمة المرور'
+                : 'Leave empty if you do not want to change the password'}
+            </div>
+          </Field>
+        </div>
+      )}
+
       <div style={{gridColumn:'1 / -1'}}>
         <Field label={lang==='ar'?'الجنس':'Gender'}>
           <div style={{display:'flex',gap:'10px'}}>
@@ -128,7 +158,6 @@ function FormBody({ form, setForm, errors, setErrors, iStyle, lang, COLLEGES=[],
                 adminDepartmentId: '',
                 academicRank: ''
               });
-              // Reset errors for fields that may no longer be required
               setErrors(p=>({
                 ...p,
                 collegeId: '',
@@ -540,6 +569,7 @@ function Employees({ lang, user, showFormDefault }) {
       nameEn: emp.nameEn || emp.NameEn || '',
       email: emp.email || emp.Email || '',
       phone: emp.phone || emp.Phone || '',
+      password: '',
     };
 
     // Coerce IDs to strings for reliable comparison (backend may return numbers)
@@ -561,6 +591,19 @@ function Employees({ lang, user, showFormDefault }) {
     );
     const foundCollegeId = colObj ? String(colObj.id) : colIdInput;
 
+    // تحديد الجنس
+    let genderValue = 'male';
+    const genderRaw = normEmp.gender ?? normEmp.Gender ?? '';
+
+    if (genderRaw !== undefined && genderRaw !== null && genderRaw !== '') {
+      const genderStr = String(genderRaw).toLowerCase().trim();
+      if (genderStr === 'female' || genderStr === 'f' || genderStr === 'أنثى' || genderStr === '2') {
+        genderValue = 'female';
+      } else if (genderStr === 'male' || genderStr === 'm' || genderStr === 'ذكر' || genderStr === '1' || genderStr === '0') {
+        genderValue = 'male';
+      }
+    }
+
     setEditForm({
       ...normEmp,
       role: roleVal,
@@ -568,8 +611,9 @@ function Employees({ lang, user, showFormDefault }) {
       collegeId: foundCollegeId,
       adminDepartmentId: foundDeptId,
       headType: normEmp.headType || emp.HeadType || (roleVal === 'head_department' ? 'academic' : ''),
-      gender: (normEmp.gender === 2 || String(normEmp.gender) === '2' || String(normEmp.gender || '').toLowerCase() === 'female') ? 'female' : 'male',
-      academicRank: normEmp.academicRank || normEmp.AcademicRank || ''
+      gender: genderValue,
+      academicRank: normEmp.academicRank || normEmp.AcademicRank || '',
+      password: '',
     });
     setEditMode(true);
     setEditErrors({});
@@ -577,6 +621,27 @@ function Employees({ lang, user, showFormDefault }) {
   }
 
   function closeDetail() { setDetailEmp(null); setEditMode(false); setEditErrors({}); setEditSaved(false); }
+
+  const [deleteTarget, setDeleteTarget] = useState(null); // employee object pending delete confirmation
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
+
+  async function confirmDelete() {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    setDeleteError('');
+    try {
+      await employeesService.deleteEmployee(deleteTarget.id);
+      setEmployees(prev => prev.filter(e => e.id !== deleteTarget.id));
+      if (detailEmp?.id === deleteTarget.id) closeDetail();
+      setDeleteTarget(null);
+    } catch (err) {
+      console.error('Delete employee failed', err);
+      setDeleteError(err.message || (lang === 'ar' ? 'فشل حذف الموظف' : 'Failed to delete employee'));
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   async function handleEdit() {
     const e = validate(editForm, true);
@@ -617,6 +682,11 @@ function Employees({ lang, user, showFormDefault }) {
       roleClassification: roleClassificationMap[role] || 1,
       headType: role === 'head_department' ? (editForm.headType || 'academic') : null,
     };
+
+    // أضف الباسورد لو موجود
+    if (editForm.password && editForm.password.trim().length > 0) {
+      payload.password = editForm.password;
+    }
 
     try {
       await employeesService.updateEmployee(editForm.id, payload);
@@ -971,9 +1041,12 @@ function Employees({ lang, user, showFormDefault }) {
                   </div>
                 ));
               })()}
-              <div className="ca" style={{marginTop:'12px',opacity:0,transform:'translateY(6px)',transition:'opacity .2s,transform .2s'}}>
-                <button onClick={()=>{setDetailEmp(emp);setEditMode(false);}} style={{width:'100%',padding:'8px',background:meta.bg,color:meta.color,border:`1px solid ${meta.border}`,borderRadius:'10px',fontSize:'12px',fontWeight:'700',cursor:'pointer',fontFamily:'Cairo'}}>
+              <div className="ca" style={{marginTop:'12px',opacity:0,transform:'translateY(6px)',transition:'opacity .2s,transform .2s',display:'flex',gap:'8px'}}>
+                <button onClick={()=>{setDetailEmp(emp);setEditMode(false);}} style={{flex:1,padding:'8px',background:meta.bg,color:meta.color,border:`1px solid ${meta.border}`,borderRadius:'10px',fontSize:'12px',fontWeight:'700',cursor:'pointer',fontFamily:'Cairo'}}>
                   {lang==='ar'?'👁 عرض التفاصيل':'👁 View Details'}
+                </button>
+                <button onClick={(e)=>{e.stopPropagation();setDeleteTarget(emp);setDeleteError('');}} title={lang==='ar'?'حذف الموظف':'Delete employee'} style={{padding:'8px 12px',background:'#FEE2E2',color:'#DC2626',border:'1px solid #FECACA',borderRadius:'10px',fontSize:'13px',fontWeight:'700',cursor:'pointer',fontFamily:'Cairo'}}>
+                  🗑️
                 </button>
               </div>
             </div>
@@ -1000,13 +1073,19 @@ function Employees({ lang, user, showFormDefault }) {
                 </div>
               </div>
               {/* Edit / View toggle — centered */}
-              <div style={{marginTop:'16px',display:'flex',justifyContent:'center'}}>
+              <div style={{marginTop:'16px',display:'flex',justifyContent:'center',gap:'10px'}}>
                 <button onClick={()=>{ if(editMode){setEditMode(false);setEditErrors({});}else{openEdit(detailEmp);} }}
                   onMouseEnter={e=>{ if(!editMode){e.currentTarget.style.background='white';e.currentTarget.style.transform='translateY(-2px)';e.currentTarget.style.boxShadow='0 6px 16px rgba(0,0,0,.15)';}}}
                   onMouseLeave={e=>{ e.currentTarget.style.background=editMode?'rgba(255,255,255,.15)':'rgba(255,255,255,.9)';e.currentTarget.style.transform='translateY(0)';e.currentTarget.style.boxShadow='none';}}
                   style={{display:'inline-flex',alignItems:'center',gap:'8px',padding:'10px 28px',background:editMode?'rgba(255,255,255,.15)':'rgba(255,255,255,.9)',color:editMode?'white':meta.color,border:`1.5px solid ${editMode?'rgba(255,255,255,.35)':'rgba(255,255,255,.9)'}`,borderRadius:'12px',fontSize:'13px',fontWeight:'800',cursor:'pointer',fontFamily:'Cairo',transition:'all .2s',letterSpacing:'.3px'}}>
                   {editMode?(lang==='ar'?'عرض فقط':'View Only'):(lang==='ar'?'تعديل البيانات':'Edit Details')}
                 </button>
+                {!editMode && (
+                  <button onClick={()=>{setDeleteTarget(detailEmp);setDeleteError('');}}
+                    style={{display:'inline-flex',alignItems:'center',gap:'8px',padding:'10px 20px',background:'rgba(220,38,38,.18)',color:'white',border:'1.5px solid rgba(255,255,255,.35)',borderRadius:'12px',fontSize:'13px',fontWeight:'800',cursor:'pointer',fontFamily:'Cairo'}}>
+                    🗑️ {lang==='ar'?'حذف':'Delete'}
+                  </button>
+                )}
               </div>
             </div>
 
@@ -1017,38 +1096,49 @@ function Employees({ lang, user, showFormDefault }) {
                   const role = getRole(detailEmp);
                   const emailIcon = <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#64748B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>;
                   const phoneIcon = <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#64748B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.65 3.18 2 2 0 0 1 3.62 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.35a16 16 0 0 0 6.29 6.29l1.42-1.42a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>;
-                  const deptIcon  = <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#64748B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>;
-                  const colIcon   = <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#64748B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>;
-                  const rankIcon  = <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#64748B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>;
-                  const idIcon    = <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#64748B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>;
+                  const deptIcon = <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#64748B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>;
+                  const colIcon = <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#64748B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>;
+                  const rankIcon = <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#64748B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>;
+                  const idIcon = <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#64748B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>;
+                  
 
+                  // بناء الصفوف مع الباسورد (يظهر كـ نص عادي)
                   const rows = [
-                    {icon:emailIcon, label:lang==='ar'?'البريد':'Email', value:detailEmp.email},
+                    { icon: emailIcon, label: lang === 'ar' ? 'البريد' : 'Email', value: detailEmp.email },
+                  
                   ];
-                  if (role === 'academic' && detailEmp.academicRank) {
-                    rows.push({icon:rankIcon, label:lang==='ar'?'الدرجة العلمية':'Rank', value:detailEmp.academicRank});
-                  }
-                  rows.push({icon:phoneIcon, label:lang==='ar'?'الهاتف':'Phone', value:detailEmp.phone});
-                  const deptName = getDeptName(detailEmp);
-                  const colName  = getCollegeName(detailEmp);
-                  if (role === 'academic') {
-                    if (deptName) rows.push({icon:deptIcon, label:lang==='ar'?'القسم':'Department', value:deptName});
-                    if (colName)  rows.push({icon:colIcon,  label:lang==='ar'?'الكلية':'College',    value:colName});
-                  } else if (role === 'administrative') {
-                    if (deptName) rows.push({icon:deptIcon, label:lang==='ar'?'الإدارة':'Administration', value:deptName});
-                  } else if (role === 'head_department') {
-                    if (deptName) rows.push({icon:deptIcon, label:lang==='ar'?'القسم':'Department', value:deptName});
-                    if (colName)  rows.push({icon:colIcon,  label:lang==='ar'?'الكلية':'College',    value:colName});
-                  } else if (role === 'dean') {
-                    if (colName)  rows.push({icon:colIcon,  label:lang==='ar'?'الكلية':'College', value:colName});
-                  }
-                  rows.push({icon:idIcon, label:lang==='ar'?'الكود':'ID', value:detailEmp.id});
 
-                  return rows.map(row=>(
-                    <div key={row.label} style={{display:'flex',alignItems:'center',gap:'12px',padding:'11px 0',borderBottom:'1px solid #F1F5F9'}}>
-                      <span style={{width:'20px',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{row.icon}</span>
-                      <span style={{color:'#94A3B8',fontSize:'13px',fontWeight:'600',minWidth:'100px'}}>{row.label}</span>
-                      <span style={{color:'#0F172A',fontSize:'14px',fontWeight:'700',flex:1,textAlign:'end'}}>{row.value||'—'}</span>
+                  if (role === 'academic' && detailEmp.academicRank) {
+                    rows.push({ icon: rankIcon, label: lang === 'ar' ? 'الدرجة العلمية' : 'Rank', value: detailEmp.academicRank });
+                  }
+                  rows.push({ icon: phoneIcon, label: lang === 'ar' ? 'الهاتف' : 'Phone', value: detailEmp.phone });
+                  
+                  const deptName = getDeptName(detailEmp);
+                  const colName = getCollegeName(detailEmp);
+                  
+                  if (role === 'academic') {
+                    if (deptName) rows.push({ icon: deptIcon, label: lang === 'ar' ? 'القسم' : 'Department', value: deptName });
+                    if (colName) rows.push({ icon: colIcon, label: lang === 'ar' ? 'الكلية' : 'College', value: colName });
+                  } else if (role === 'administrative') {
+                    if (deptName) rows.push({ icon: deptIcon, label: lang === 'ar' ? 'الإدارة' : 'Administration', value: deptName });
+                  } else if (role === 'head_department') {
+                    if (deptName) rows.push({ icon: deptIcon, label: lang === 'ar' ? 'القسم' : 'Department', value: deptName });
+                    if (colName) rows.push({ icon: colIcon, label: lang === 'ar' ? 'الكلية' : 'College', value: colName });
+                  } else if (role === 'dean') {
+                    if (colName) rows.push({ icon: colIcon, label: lang === 'ar' ? 'الكلية' : 'College', value: colName });
+                  }
+                  rows.push({ icon: idIcon, label: lang === 'ar' ? 'الكود' : 'ID', value: detailEmp.id });
+
+                  return rows.map(row => (
+                    <div key={row.label} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '11px 0', borderBottom: '1px solid #F1F5F9' }}>
+                      <span style={{ width: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{row.icon}</span>
+                      <span style={{ color: '#94A3B8', fontSize: '13px', fontWeight: '600', minWidth: '100px' }}>{row.label}</span>
+                      <span style={{ color: '#0F172A', fontSize: '14px', fontWeight: '700', flex: 1, textAlign: 'end' }}>
+                        {row.value || '—'}
+                      </span>
+                      {row.note && (
+                        <span style={{ fontSize: '11px', color: '#B45309', flex: 1, textAlign: 'end' }}>{row.note}</span>
+                      )}
                     </div>
                   ));
                 })()}
@@ -1058,7 +1148,18 @@ function Employees({ lang, user, showFormDefault }) {
             {/* Edit mode */}
             {editMode&&(
               <>
-                <FormBody form={editForm} setForm={setEditForm} errors={editErrors} setErrors={setEditErrors} iStyle={iStyle} lang={lang} COLLEGES={COLLEGES} DEPARTMENTS={DEPARTMENTS} ADMIN_DEPTS={ADMIN_DEPTS}/>
+                <FormBody
+                  form={editForm}
+                  setForm={setEditForm}
+                  errors={editErrors}
+                  setErrors={setEditErrors}
+                  iStyle={iStyle}
+                  lang={lang}
+                  COLLEGES={COLLEGES}
+                  DEPARTMENTS={DEPARTMENTS}
+                  ADMIN_DEPTS={ADMIN_DEPTS}
+                  showPassword={true}
+                />
                 <div style={{padding:'0 24px 22px',display:'flex',alignItems:'center',gap:'10px',borderTop:'1px solid #F1F5F9',paddingTop:'16px'}}>
                   {editSaved?(
                     <div style={{display:'flex',alignItems:'center',gap:'8px',color:'#166534',fontWeight:'700',fontSize:'14px',background:'#DCFCE7',padding:'10px 20px',borderRadius:'10px',width:'100%',justifyContent:'center'}}>
@@ -1162,6 +1263,34 @@ function Employees({ lang, user, showFormDefault }) {
           onCancel={closeAdd}
         />
       )}
+
+      {/* ══════ DELETE CONFIRMATION ══════ */}
+      <Modal open={!!deleteTarget} onClose={()=>{ if(!deleting){setDeleteTarget(null);setDeleteError('');} }} lang={lang} maxWidth="420px">
+        {deleteTarget && (
+          <div style={{padding:'28px 24px',textAlign:'center'}}>
+            <div style={{width:'56px',height:'56px',borderRadius:'50%',background:'#FEE2E2',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'26px',margin:'0 auto 16px'}}>🗑️</div>
+            <div style={{fontSize:'16px',fontWeight:'800',color:'#0F172A',marginBottom:'8px'}}>
+              {lang==='ar'?'تأكيد حذف الموظف':'Confirm employee deletion'}
+            </div>
+            <div style={{fontSize:'13px',color:'#64748B',marginBottom:'20px',lineHeight:'1.6'}}>
+              {lang==='ar'
+                ? `هل أنت متأكد من حذف "${deleteTarget.name}"؟ سيتم تعطيل حسابه ولن يظهر في القوائم بعد الآن.`
+                : `Are you sure you want to delete "${deleteTarget.nameEn || deleteTarget.name}"? Their account will be deactivated and they will no longer appear in lists.`}
+            </div>
+            {deleteError && (
+              <div style={{marginBottom:'14px',padding:'8px 14px',background:'#FEE2E2',borderRadius:'8px',color:'#991B1B',fontSize:'12px',fontWeight:'700'}}>⚠️ {deleteError}</div>
+            )}
+            <div style={{display:'flex',gap:'10px'}}>
+              <button disabled={deleting} onClick={confirmDelete} style={{flex:1,padding:'11px',background: deleting ? '#FCA5A5' : '#DC2626',color:'white',border:'none',borderRadius:'10px',fontSize:'14px',fontWeight:'700',cursor:deleting?'default':'pointer',fontFamily:'Cairo'}}>
+                {deleting ? (lang==='ar'?'جارِ الحذف...':'Deleting...') : (lang==='ar'?'حذف نهائي':'Delete')}
+              </button>
+              <button disabled={deleting} onClick={()=>{setDeleteTarget(null);setDeleteError('');}} style={{flex:1,padding:'11px',background:'#F1F5F9',color:'#475569',border:'none',borderRadius:'10px',fontSize:'14px',fontWeight:'700',cursor:'pointer',fontFamily:'Cairo'}}>
+                {lang==='ar'?'إلغاء':'Cancel'}
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
 
     </div>
   );

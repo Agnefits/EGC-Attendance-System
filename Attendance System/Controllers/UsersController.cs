@@ -226,5 +226,26 @@ namespace Attendance_System.Controllers
                 data = new { user.Id, user.IsActive }
             });
         }
+
+        // PUT /api/users/{id}/reset-password — Admin sets a brand-new password for an
+        // employee's login account. There's no way to recover or display the old one
+        // (it's stored as a one-way hash), so this is the only way to help someone
+        // who's locked out.
+        [HttpPut("{id}/reset-password")]
+        [AuthorizedRoles(UserRole.Admin)]
+        public async Task<IActionResult> ResetPassword(long id, [FromBody] ResetPasswordDto dto)
+        {
+            var user = await _unitOfWork.Users.GetByIdAsync(id);
+            if (user == null || user.DeletedAt != null)
+                return NotFound(new { success = false, message = "User not found" });
+
+            user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.NewPassword);
+            user.UpdatedAt = DateTime.Now;
+
+            _unitOfWork.Users.Update(user);
+            await _unitOfWork.CompleteAsync();
+
+            return Ok(new { success = true, message = "Password reset successfully" });
+        }
     }
 }

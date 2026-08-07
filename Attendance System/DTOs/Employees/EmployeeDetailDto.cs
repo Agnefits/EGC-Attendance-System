@@ -20,5 +20,8 @@ namespace Attendance_System.DTOs.Employees
         public string? Department { get; set; }
         public string? College { get; set; }
         public EmployeeUserSummaryDto? User { get; set; }
+        
+        // 🔴 أضفي السطر ده للباسورد
+        public string? Password { get; set; }
     }
 }

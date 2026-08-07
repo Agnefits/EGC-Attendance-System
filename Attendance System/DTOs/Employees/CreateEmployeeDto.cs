@@ -13,7 +13,7 @@ namespace Attendance_System.DTOs.Employees
         public EmployeeType? Type { get; set; }
         public string? AcademicRank { get; set; }
         public string? DepartmentId { get; set; }
-        public string? CollegeId { get; set; }
+        public string? CollegeId { get; set; }  // 🔴 لازم يكون موجود
         public string? HeadType { get; set; }
     }
 }
