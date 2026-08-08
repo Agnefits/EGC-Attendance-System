@@ -512,14 +512,14 @@ export default function EmployeeDashboard({lang,user,setActivePage}){
   );
 
   return(
-    <div style={{padding:'24px 28px',fontFamily:'Cairo,sans-serif',direction:dir,background:'#F1F5F9',minHeight:'100%'}}>
+    <div className="page-pad" style={{fontFamily:'Cairo,sans-serif',direction:dir,background:'#F1F5F9',minHeight:'100%'}}>
 
       {/* ══ HERO ══ */}
       <div style={{borderRadius:'16px',marginBottom:'18px',overflow:'hidden',boxShadow:'0 4px 16px rgba(13,59,122,.15)'}}>
 
         {/* ── Gradient band ── */}
         <div style={{background:'linear-gradient(135deg,#0D3B7A 0%,#1565C0 60%,#1E88E5 100%)',padding:'20px 26px',display:'flex',justifyContent:'space-between',alignItems:'center',gap:'16px',flexWrap:'wrap'}}>
-          <div style={{display:'flex',alignItems:'center',gap:'14px'}}>
+          <div style={{display:'flex',alignItems:'center',gap:'14px',minWidth:0,flex:1}}>
             <div style={{width:'50px',height:'50px',borderRadius:'14px',background:'rgba(255,255,255,.15)',border:'2px solid rgba(255,255,255,.25)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'20px',fontWeight:'900',color:'white',flexShrink:0}}>
               {(lang==='en'?emp?.nameEn:emp?.name)?.charAt(0)||'?'}
             </div>
@@ -533,7 +533,7 @@ export default function EmployeeDashboard({lang,user,setActivePage}){
               </div>
             </div>
           </div>
-          <div style={{display:'flex',alignItems:'center',gap:'16px',flexShrink:0}}>
+          <div style={{display:'flex',alignItems:'center',gap:'16px',flexWrap:'wrap'}}>
             <div style={{textAlign:'center'}}>
               <div style={{fontSize:'11px',color:'rgba(255,255,255,.5)',marginBottom:'4px',letterSpacing:'.5px'}}>{lang==='ar'?'اليوم':'TODAY'}</div>
               {todaySt
@@ -560,7 +560,7 @@ export default function EmployeeDashboard({lang,user,setActivePage}){
         </div>
 
         {/* ── Stats strip ── */}
-        <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',background:'white'}}>
+        <div className="rg-4 stat-stripe" style={{background:'white'}}>
           {[
             {v:pres,     l:{ar:'حضور',       en:'Present'},  c:'#166534',bg:'#F0FDF4'},
             {v:abs,      l:{ar:'غياب',        en:'Absent'},   c:'#991B1B',bg:'#FEF2F2'},
@@ -579,7 +579,7 @@ export default function EmployeeDashboard({lang,user,setActivePage}){
       </div>
 
       {/* ══ LEAVE BALANCES ══ */}
-      <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'10px',marginBottom:'16px'}}>
+      <div className="rg-3" style={{gap:'10px',marginBottom:'16px'}}>
         {LEAVE_BALANCES.map(lb=>{
           const { start:lyStart, end:lyEnd } = getLeaveYearPeriod();
           const used=myLv.filter(l=>l.type===lb.id&&l.from>=lyStart&&l.from<=lyEnd).reduce((s,l)=>s+l.days,0);
@@ -604,7 +604,7 @@ export default function EmployeeDashboard({lang,user,setActivePage}){
       </div>
 
       {/* ══ QUICK ACTIONS ══ */}
-      <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'12px',marginBottom:'16px'}}>
+      <div className="rg-3" style={{gap:'12px',marginBottom:'16px'}}>
         {[
           {icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>,
            l:{ar:'تسجيل الحضور',en:'Check In'},    ic:'#166534',ib:'#DCFCE7',ibd:'#BBF7D0',page:'attendance',
@@ -631,7 +631,7 @@ export default function EmployeeDashboard({lang,user,setActivePage}){
       </div>
 
       {/* ══ MAIN ROW ══ */}
-      <div style={{display:'grid',gridTemplateColumns:'minmax(0,1fr) 360px',gap:'16px',marginBottom:'18px'}}>
+      <div className="rg-2-stack" style={{gap:'16px',marginBottom:'18px'}}>
 
         {/* LEFT: stats column */}
         <div style={{display:'flex',flexDirection:'column',gap:'12px',minWidth:0,overflow:'hidden'}}>
@@ -759,7 +759,7 @@ export default function EmployeeDashboard({lang,user,setActivePage}){
           </div>
 
           {/* ── Attendance donut + Permissions full width ── */}
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'12px'}}>
+          <div className="rg-2-mobile-stack" style={{gap:'12px'}}>
 
             {/* Attendance donut */}
             <div style={{...card,padding:'16px 18px',borderInlineStart:'3px solid #1565C0'}}>
@@ -1035,41 +1035,43 @@ export default function EmployeeDashboard({lang,user,setActivePage}){
             <div style={{fontSize:'12px'}}>{lang==='ar'?'اضغط + إضافة لإضافة حصة':'Press + Add to add a slot'}</div>
           </div>
         ) : (
-          <div style={{display:'grid',gridTemplateColumns:'repeat(6,1fr)',borderTop:'none'}}>
-            {schedule.map((day,idx)=>(
-              <div key={day.day} style={{borderInlineEnd:idx<5?'1px solid #F1F5F9':'none'}}>
-                {/* Day header */}
-                <div style={{padding:'10px 12px',textAlign:'center',background:'#F8FAFC',borderBottom:'1px solid #F1F5F9'}}>
-                  <div style={{fontSize:'12px',fontWeight:'800',color:day.entries.length>0?'#1565C0':'#94A3B8'}}>{DAYS[lang][day.day]}</div>
-                  {day.entries.length>0 && <div style={{fontSize:'11px',color:'#94A3B8',marginTop:'2px'}}>{day.entries.length} {lang==='ar'?'حصة':'slot'}</div>}
+          <div className="tbl-wrap">
+            <div style={{display:'grid',gridTemplateColumns:'repeat(6,1fr)',minWidth:'640px',borderTop:'none'}}>
+              {schedule.map((day,idx)=>(
+                <div key={day.day} style={{borderInlineEnd:idx<5?'1px solid #F1F5F9':'none'}}>
+                  {/* Day header */}
+                  <div style={{padding:'10px 12px',textAlign:'center',background:'#F8FAFC',borderBottom:'1px solid #F1F5F9'}}>
+                    <div style={{fontSize:'12px',fontWeight:'800',color:day.entries.length>0?'#1565C0':'#94A3B8'}}>{DAYS[lang][day.day]}</div>
+                    {day.entries.length>0 && <div style={{fontSize:'11px',color:'#94A3B8',marginTop:'2px'}}>{day.entries.length} {lang==='ar'?'حصة':'slot'}</div>}
+                  </div>
+                  {/* Slots */}
+                  <div style={{padding:'8px',display:'flex',flexDirection:'column',gap:'6px',minHeight:'80px',alignItems:'center'}}>
+                    {day.entries.length===0
+                      ? <div style={{textAlign:'center',padding:'12px 0',color:'#E2E8F0',fontSize:'18px'}}>—</div>
+                      : day.entries.sort((a,b)=>a.from.localeCompare(b.from)).map(entry=>(
+                        <div key={entry.id}
+                          style={{padding:'8px 10px',borderRadius:'9px',background:`${entry.color}12`,border:`1.5px solid ${entry.color}30`,borderInlineStart:`3px solid ${entry.color}`,position:'relative',transition:'all .15s'}}
+                          onMouseEnter={e=>e.currentTarget.style.background=`${entry.color}20`}
+                          onMouseLeave={e=>e.currentTarget.style.background=`${entry.color}12`}>
+                          <div style={{fontSize:'11px',fontWeight:'800',color:entry.color,direction:'ltr',marginBottom:'2px'}}>{entry.from} – {entry.to}</div>
+                          <div style={{fontSize:'12px',fontWeight:'700',color:'#0F172A',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{entry.subject}</div>
+                          {(entry.room||entry.group) && (
+                            <div style={{fontSize:'11px',color:'#64748B',marginTop:'3px',display:'flex',gap:'6px',flexWrap:'wrap'}}>
+                              {entry.room  && <span>🏫 {entry.room}</span>}
+                              {entry.group && <span>👥 {entry.group}</span>}
+                            </div>
+                          )}
+                          <button onClick={()=>removeSlot(day.day,entry.id)}
+                            style={{position:'absolute',top:'5px',[lang==='ar'?'left':'right']:'5px',background:'none',border:'none',cursor:'pointer',color:'#CBD5E1',fontSize:'12px',lineHeight:1,transition:'color .15s',padding:'2px'}}
+                            onMouseEnter={e=>e.currentTarget.style.color='#DC2626'}
+                            onMouseLeave={e=>e.currentTarget.style.color='#CBD5E1'}>✕</button>
+                        </div>
+                      ))
+                    }
+                  </div>
                 </div>
-                {/* Slots */}
-                <div style={{padding:'8px',display:'flex',flexDirection:'column',gap:'6px',minHeight:'80px',alignItems:'center'}}>
-                  {day.entries.length===0
-                    ? <div style={{textAlign:'center',padding:'12px 0',color:'#E2E8F0',fontSize:'18px'}}>—</div>
-                    : day.entries.sort((a,b)=>a.from.localeCompare(b.from)).map(entry=>(
-                      <div key={entry.id}
-                        style={{padding:'8px 10px',borderRadius:'9px',background:`${entry.color}12`,border:`1.5px solid ${entry.color}30`,borderInlineStart:`3px solid ${entry.color}`,position:'relative',transition:'all .15s'}}
-                        onMouseEnter={e=>e.currentTarget.style.background=`${entry.color}20`}
-                        onMouseLeave={e=>e.currentTarget.style.background=`${entry.color}12`}>
-                        <div style={{fontSize:'11px',fontWeight:'800',color:entry.color,direction:'ltr',marginBottom:'2px'}}>{entry.from} – {entry.to}</div>
-                        <div style={{fontSize:'12px',fontWeight:'700',color:'#0F172A',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{entry.subject}</div>
-                        {(entry.room||entry.group) && (
-                          <div style={{fontSize:'11px',color:'#64748B',marginTop:'3px',display:'flex',gap:'6px',flexWrap:'wrap'}}>
-                            {entry.room  && <span>🏫 {entry.room}</span>}
-                            {entry.group && <span>👥 {entry.group}</span>}
-                          </div>
-                        )}
-                        <button onClick={()=>removeSlot(day.day,entry.id)}
-                          style={{position:'absolute',top:'5px',[lang==='ar'?'left':'right']:'5px',background:'none',border:'none',cursor:'pointer',color:'#CBD5E1',fontSize:'12px',lineHeight:1,transition:'color .15s',padding:'2px'}}
-                          onMouseEnter={e=>e.currentTarget.style.color='#DC2626'}
-                          onMouseLeave={e=>e.currentTarget.style.color='#CBD5E1'}>✕</button>
-                      </div>
-                    ))
-                  }
-                </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         )}
       </div>

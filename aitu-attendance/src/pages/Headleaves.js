@@ -124,7 +124,7 @@ export default function HeadLeaves({ lang, user }) {
   const tdS = (x = {}) => ({ padding: '11px 14px', borderBottom: '1px solid #F1F5F9', fontSize: '13px', textAlign: 'center', verticalAlign: 'middle', ...x });
 
   return (
-    <div style={{ padding: '24px 28px', fontFamily: 'Cairo,sans-serif', direction: dir, minHeight: '100%', background: '#F8FAFC' }}>
+    <div className="page-pad" style={{ fontFamily: 'Cairo,sans-serif', direction: dir, minHeight: '100%', background: '#F8FAFC' }}>
       <style>{`
         @keyframes popIn { from{opacity:0;transform:scale(.94) translateY(12px)} to{opacity:1;transform:scale(1) translateY(0)} }
         @keyframes slideUp { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }

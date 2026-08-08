@@ -100,7 +100,7 @@ function LoginPage({ onLogin, lang, setLang, t }) {
     }}>
 
       {/* ── CARD ── */}
-      <div style={{
+      <div className="login-card-inner" style={{
         width: '100%',
         maxWidth: '440px',
         padding: '42px',
@@ -112,7 +112,7 @@ function LoginPage({ onLogin, lang, setLang, t }) {
       }}>
 
         {/* LOGO */}
-        <div style={{
+        <div className="login-logo" style={{
           width: '140px',
           height: '140px',
           borderRadius: '50%',
@@ -126,15 +126,15 @@ function LoginPage({ onLogin, lang, setLang, t }) {
         </div>
 
         {/* TITLE */}
-        <h1 style={{ fontSize: '38px', fontWeight: '800', margin: '0', color: '#1565C0', fontFamily: 'Cairo' }}>AITU</h1>
+        <h1 className="login-h1" style={{ fontSize: '38px', fontWeight: '800', margin: '0', color: '#1565C0', fontFamily: 'Cairo' }}>AITU</h1>
 
         {/* SYSTEM NAME */}
-        <p style={{ margin: '6px 0 10px', color: '#1D4ED8', fontSize: '20px', fontWeight: '600', fontFamily: 'Cairo' }}>
+        <p className="login-system" style={{ margin: '6px 0 10px', color: '#1D4ED8', fontSize: '20px', fontWeight: '600', fontFamily: 'Cairo' }}>
           {lang === 'ar' ? 'نظام تسجيل الحضور والغياب' : 'Attendance Management System'}
         </p>
 
         {/* UNIVERSITY */}
-        <p style={{ margin: '0 0 18px', color: '#475569', fontSize: '22px', fontWeight: '600', direction: 'rtl', fontFamily: 'Cairo', lineHeight: 1.4 }}>
+        <p className="login-univ" style={{ margin: '0 0 18px', color: '#475569', fontSize: '22px', fontWeight: '600', direction: 'rtl', fontFamily: 'Cairo', lineHeight: 1.4 }}>
           جَامِعَةُ أَسْيُوطَ التِّكْنُولُوجِيَّةُ الدَّوْلِيَّةُ
         </p>
 

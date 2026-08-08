@@ -74,6 +74,7 @@ function Header({ lang, setLang, t, user, onLogout }) {
           .hdr-center       { display:none; }
           .hdr-univ-en      { display:none; }
           .hdr-hamburger    { display:flex !important; }
+          .hdr-spacer       { display:none; }
         }
         @media (max-width:767px) {
           .hdr-system       { display:none; }
@@ -162,7 +163,7 @@ function Header({ lang, setLang, t, user, onLogout }) {
         </div>
 
         {/* Spacer to balance center */}
-        <div style={{flexShrink:0,minWidth:'200px'}}/>
+        <div className="hdr-spacer" style={{flexShrink:0,minWidth:'200px'}}/>
       </header>
 
       {/* Overlay */}

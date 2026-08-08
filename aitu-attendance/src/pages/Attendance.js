@@ -218,7 +218,7 @@ function Attendance({ t, lang, user }) {
      RENDER
   ════════════════════════════════════════ */
   return (
-    <div style={{padding:'24px',fontFamily:'Cairo, sans-serif',direction:dir}}>
+    <div className="page-pad" style={{fontFamily:'Cairo, sans-serif',direction:dir}}>
 
       {/* ── Insecure-origin warning banner ── */}
       {(user.role==='employee'||user.role==='hr') && !isSecureOrigin() && (
@@ -272,8 +272,8 @@ function Attendance({ t, lang, user }) {
             <div style={{background:'white'}}>
 
               {/* Progress steps */}
-              <div style={{padding:'22px 40px',borderBottom:'1px solid #F1F5F9'}}>
-                <div style={{display:'flex',alignItems:'center'}}>
+              <div style={{padding:'18px 16px',borderBottom:'1px solid #F1F5F9',overflowX:'auto'}}>
+                <div style={{display:'flex',alignItems:'center',minWidth:'280px'}}>
                   {steps.map((s,i)=>(
                     <React.Fragment key={i}>
                       <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:'5px',flexShrink:0,width:'90px'}}>
@@ -359,7 +359,7 @@ function Attendance({ t, lang, user }) {
             <div style={{padding:'13px 18px',borderBottom:'1px solid #F1F5F9',fontSize:'14px',fontWeight:'800',color:'#0F172A'}}>
               📅 {lang==='ar' ? 'سجل حضوري' : 'My Attendance'}
             </div>
-            <div style={{overflowX:'auto',maxHeight:'380px',overflowY:'auto',scrollbarWidth:'thin',scrollbarColor:'#94A3B8 #E2E8F0'}}>
+            <div className="tbl-wrap" style={{maxHeight:'380px',overflowY:'auto'}}>
               <table style={{width:'100%',borderCollapse:'collapse'}}>
                 <thead>
                   <tr>
@@ -406,7 +406,7 @@ function Attendance({ t, lang, user }) {
           <div style={{padding:'13px 18px',borderBottom:'1px solid #F1F5F9',fontSize:'14px',fontWeight:'800',color:'#0F172A'}}>
             {t.todayLog || (lang==='ar'?'سجل الحضور اليوم':"Today's Attendance")}
           </div>
-          <div style={{overflowX:'auto',maxHeight:'420px',overflowY:'auto',scrollbarWidth:'thin',scrollbarColor:'#94A3B8 #E2E8F0'}}>
+          <div className="tbl-wrap" style={{maxHeight:'420px',overflowY:'auto'}}>
             <table style={{width:'100%',borderCollapse:'collapse'}}>
               <thead>
                 <tr>

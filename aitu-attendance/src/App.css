@@ -385,11 +385,32 @@ select {
 
 @media (max-width: 479px) {
   .rg-6, .rg-5, .rg-4 { grid-template-columns:1fr 1fr; gap:8px; }
-  .rg-3, .rg-2         { grid-template-columns:1fr;     gap:8px; }
+  .rg-3               { grid-template-columns:1fr 1fr; gap:8px; }
+  .rg-2               { grid-template-columns:1fr;     gap:8px; }
 }
 
-/* Table wrapper — always scrollable */
-.tbl-wrap { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+/* Table wrapper — always scrollable with smooth touch momentum & subtle scrollbars */
+.tbl-wrap {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: #CBD5E1 #F1F5F9;
+}
+.tbl-wrap::-webkit-scrollbar {
+  height: 6px;
+}
+.tbl-wrap::-webkit-scrollbar-track {
+  background: #F1F5F9;
+  border-radius: 99px;
+}
+.tbl-wrap::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+  border-radius: 99px;
+}
+.tbl-wrap::-webkit-scrollbar-thumb:hover {
+  background: #94A3B8;
+}
 
 /* Filter bar — wraps on small screens */
 .filter-bar {
@@ -430,15 +451,91 @@ select {
   .col-hide-sm { display:none !important; }
 }
 
-/* Two-column that stacks on tablet */
+/* Two-column that stacks on mobile only */
 .rg-2-stack {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 20px;
 }
-@media (max-width: 1023px) {
+@media (max-width: 767px) {
   .rg-2-stack { grid-template-columns: 1fr; gap: 14px; }
 }
-@media (max-width: 639px) {
+@media (max-width: 479px) {
   .rg-2-stack { gap: 10px; }
+}
+
+/* Two-column that stacks on mobile (not tablet) */
+.rg-2-mobile-stack {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+@media (max-width: 639px) {
+  .rg-2-mobile-stack { grid-template-columns: 1fr; gap: 10px; }
+}
+
+/* Form grid: 2 cols on desktop, 1 col on mobile */
+.form-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+@media (max-width: 639px) {
+  .form-grid-2 { grid-template-columns: 1fr; gap: 10px; }
+}
+
+/* 3-col with right fixed panel (e.g. 1fr 1fr 220px) → stacks on tablet */
+.rg-3-right {
+  display: grid;
+  grid-template-columns: 1fr 1fr 220px;
+  gap: 16px;
+}
+@media (max-width: 1023px) {
+  .rg-3-right { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 767px) {
+  .rg-3-right { grid-template-columns: 1fr; gap: 10px; }
+}
+
+/* Horizontal stat stripe: collapses from n-cols to 2-cols then 1-col */
+@media (max-width: 479px) {
+  .stat-stripe { flex-direction: column !important; }
+  .stat-stripe > div {
+    border-inline-end: none !important;
+    border-bottom: 1px solid #F1F5F9;
+  }
+  .stat-stripe > div:last-child { border-bottom: none; }
+}
+
+/* Modal inner: full width on mobile */
+@media (max-width: 639px) {
+  .modal-inner {
+    border-radius: 16px !important;
+    max-height: 95vh !important;
+  }
+}
+
+/* Page header row — wrap on mobile */
+.page-hdr-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 20px;
+  padding-bottom: 18px;
+  border-bottom: 1.5px solid #E8EDF5;
+}
+
+/* Notification popup responsive width */
+.notif-popup {
+  position: fixed;
+  width: min(300px, calc(100vw - 24px));
+  background: white;
+  border-radius: 14px;
+  border: 1px solid #E2E8F0;
+  box-shadow: 0 12px 40px rgba(0,0,0,.15);
+  z-index: 99999;
+  overflow: hidden;
+  font-family: Cairo, sans-serif;
 }

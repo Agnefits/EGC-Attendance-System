@@ -186,7 +186,7 @@ function Structure({ lang }) {
   const tdS = { padding: '12px 18px', borderBottom: '1px solid #F8FAFC', fontSize: '14px', textAlign: 'center', verticalAlign: 'middle' };
 
   return (
-    <div style={{ padding: '24px 28px', fontFamily: 'Cairo, sans-serif', direction: dir, background: '#F1F5F9', minHeight: '100%' }}>
+    <div className="page-pad" style={{ fontFamily: 'Cairo, sans-serif', direction: dir, background: '#F1F5F9', minHeight: '100%' }}>
 
       {/* ── Hero header ── */}
       <div style={{ background: 'linear-gradient(135deg, #0D3B7A, #1565C0, #1E88E5)', borderRadius: '18px', padding: '22px 26px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px', position: 'relative', overflow: 'hidden', boxShadow: '0 4px 20px rgba(13,59,122,.15)' }}>

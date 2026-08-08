@@ -201,7 +201,7 @@ export default function AddEmployeeForm({ lang, onSave, onCancel, colleges = [],
           {/* Section 1: Personal */}
           <SectionTitle icon="🪪" title={ar?'البيانات الشخصية':'Personal Information'}/>
 
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'11px' }}>
+          <div className="form-grid-2" style={{ gap:'11px' }}>
             <Field label={ar?'الاسم بالعربي':'Arabic Name'} required error={errors.name}>
               <input data-k="name" value={form.name} onChange={e=>setForm(p=>({...p,name:e.target.value}))} onFocus={F} onBlur={B}
                 style={inputBase(errors.name)} placeholder={ar?'مثال: محمد أحمد':'e.g. محمد أحمد'}/>
@@ -212,7 +212,7 @@ export default function AddEmployeeForm({ lang, onSave, onCancel, colleges = [],
             </Field>
           </div>
 
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'11px' }}>
+          <div className="form-grid-2" style={{ gap:'11px' }}>
             <Field label={ar?'البريد الإلكتروني':'Email'} required error={errors.email}>
               <input data-k="email" type="email" value={form.email} onChange={e=>setForm(p=>({...p,email:e.target.value}))} onFocus={F} onBlur={B}
                 style={{...inputBase(errors.email),direction:'ltr'}} placeholder="name@aitu.edu"/>
@@ -326,7 +326,7 @@ export default function AddEmployeeForm({ lang, onSave, onCancel, colleges = [],
 
           {/* Academic: College + Dept */}
           {form.role==='academic'&&(
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'11px' }}>
+            <div className="form-grid-2" style={{ gap:'11px' }}>
               <Field label={ar?'الكلية':'College'} required error={errors.collegeId}>
                 <select data-k="collegeId" value={form.collegeId} onChange={e=>setForm(p=>({...p,collegeId:e.target.value,departmentId:''}))} onFocus={F} onBlur={B} style={inputBase(errors.collegeId)}>
                   <option value="">{ar?'اختر الكلية':'Select College'}</option>
@@ -374,7 +374,7 @@ export default function AddEmployeeForm({ lang, onSave, onCancel, colleges = [],
               </Field>
 
               {form.headType==='academic' ? (
-                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'11px' }}>
+                <div className="form-grid-2" style={{ gap:'11px' }}>
                   <Field label={ar?'الكلية':'College'} required error={errors.collegeId}>
                     <select data-k="collegeId" value={form.collegeId} onChange={e=>setForm(p=>({...p,collegeId:e.target.value,departmentId:''}))} onFocus={F} onBlur={B} style={inputBase(errors.collegeId)}>
                       <option value="">{ar?'اختر الكلية':'Select College'}</option>

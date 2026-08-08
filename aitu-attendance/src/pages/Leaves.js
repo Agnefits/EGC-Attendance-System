@@ -252,7 +252,7 @@ export default function Leaves({ t, lang, user }) {
   const grantDepts = grantForm.collegeId === 'admin' ? ADMIN_DEPTS_LIVE.length ? ADMIN_DEPTS_LIVE : departments : grantForm.collegeId ? departments.filter(d => d.collegeId === grantForm.collegeId) : [];
 
   return (
-    <div style={{ padding: '24px 28px', fontFamily: 'Cairo,sans-serif', direction: dir, background: '#F1F5F9', minHeight: '100%' }}>
+    <div className="page-pad" style={{ fontFamily: 'Cairo,sans-serif', direction: dir, background: '#F1F5F9', minHeight: '100%' }}>
 
       {/* ── Hero header ── */}
       <div style={{ borderRadius: '18px', overflow: 'hidden', marginBottom: '18px', boxShadow: '0 4px 20px rgba(13,59,122,.15)' }}>

@@ -213,7 +213,7 @@ const pt = selectedType;
 const previewDays = calcDays(form.from, form.to);
 
 return (
-  <div style={{ padding: '24px', fontFamily: 'Cairo, sans-serif', direction: dir }}>
+  <div className="page-pad" style={{ fontFamily: 'Cairo, sans-serif', direction: dir }}>
 
     {/* Toast */}
     {toast && (

@@ -147,7 +147,7 @@ function Profile({ lang, user }) {
   const roleLabel = ROLE_LABEL[profile?.role]?.[lang] || profile?.role;
 
   return (
-    <div style={{ padding: '24px 28px', fontFamily: 'Cairo,sans-serif', direction: dir, background: '#F1F5F9', minHeight: '100%' }}>
+    <div className="page-pad" style={{ fontFamily: 'Cairo,sans-serif', direction: dir, background: '#F1F5F9', minHeight: '100%' }}>
 
       {toast && (
         <div style={{ position: 'fixed', top: '24px', left: '50%', transform: 'translateX(-50%)', background: toast.type === 'error' ? '#DC2626' : '#16A34A', color: 'white', padding: '12px 24px', borderRadius: '14px', zIndex: 9999, fontWeight: '800', fontSize: '13px', boxShadow: '0 8px 24px rgba(0,0,0,.2)', whiteSpace: 'nowrap' }}>
@@ -180,7 +180,7 @@ function Profile({ lang, user }) {
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '18px', alignItems: 'stretch' }}>
+      <div className="rg-2-stack" style={{ gap: '18px', alignItems: 'stretch' }}>
 
         {/* Personal info card */}
         <div style={{ background: 'white', borderRadius: '16px', border: '1px solid #E8EDF5', padding: '22px', boxShadow: '0 2px 8px rgba(0,0,0,.04)', display: 'flex', flexDirection: 'column', height: '100%', boxSizing: 'border-box' }}>
@@ -188,18 +188,18 @@ function Profile({ lang, user }) {
             <div style={{ fontSize: '15px', fontWeight: '800', color: '#0F172A' }}>{lang === 'ar' ? 'البيانات الشخصية' : 'Personal Information'}</div>
             {!editMode ? (
               <button onClick={() => setEditMode(true)}
-                style={{ padding: '7px 16px', background: '#EFF6FF', color: '#1565C0', border: '1px solid #BFDBFE', borderRadius: '9px', fontSize: '12px', fontWeight: '700', cursor: 'pointer', fontFamily: 'Cairo' }}>
+                style={{ padding: '7px 16px', background: '#EFF6FF', color: '#1565C0', border: '1px solid #BFDBFE', borderRadius: '99px', fontSize: '12px', fontWeight: '700', cursor: 'pointer', fontFamily: 'Cairo' }}>
                 ✏️ {lang === 'ar' ? 'تعديل' : 'Edit'}
               </button>
             ) : (
               <button onClick={() => { setEditMode(false); setForm({ name: emp?.name || '', nameEn: emp?.nameEn || '', phone: emp?.phone || '' }); }}
-                style={{ padding: '7px 16px', background: '#F1F5F9', color: '#475569', border: 'none', borderRadius: '9px', fontSize: '12px', fontWeight: '700', cursor: 'pointer', fontFamily: 'Cairo' }}>
+                style={{ padding: '7px 16px', background: '#F1F5F9', color: '#475569', border: 'none', borderRadius: '99px', fontSize: '12px', fontWeight: '700', cursor: 'pointer', fontFamily: 'Cairo' }}>
                 {lang === 'ar' ? 'إلغاء' : 'Cancel'}
               </button>
             )}
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
+          <div className="form-grid-2" style={{ gap: '14px', marginBottom: '14px' }}>
             <div>
               <label style={lbl}>{lang === 'ar' ? 'الاسم (عربي)' : 'Name (Arabic)'} *</label>
               {editMode
@@ -214,7 +214,7 @@ function Profile({ lang, user }) {
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
+          <div className="form-grid-2" style={{ gap: '14px', marginBottom: '14px' }}>
             <div>
               <label style={lbl}>{lang === 'ar' ? 'رقم الهاتف' : 'Phone'}</label>
               {editMode
@@ -227,7 +227,7 @@ function Profile({ lang, user }) {
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: editMode ? '18px' : 0 }}>
+          <div className="form-grid-2" style={{ gap: '14px', marginBottom: editMode ? '18px' : 0 }}>
             <div>
               <label style={lbl}>{lang === 'ar' ? 'القسم' : 'Department'}</label>
               <input value={emp?.department || '—'} disabled style={inpDisabled} />

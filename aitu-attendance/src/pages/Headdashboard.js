@@ -153,7 +153,7 @@ export default function HeadDashboard({ lang, user, setActivePage }) {
   }
 
   return (
-    <div style={{padding:'24px 28px',fontFamily:'Cairo,sans-serif',direction:dir,background:'#F1F5F9',minHeight:'100%'}}>
+    <div className="page-pad" style={{fontFamily:'Cairo,sans-serif',direction:dir,background:'#F1F5F9',minHeight:'100%'}}>
 
       {/* ══ HERO ══ */}
       <div style={{borderRadius:'16px',overflow:'hidden',marginBottom:'18px',boxShadow:'0 8px 32px rgba(21,101,192,.12)'}}>
@@ -194,7 +194,7 @@ export default function HeadDashboard({ lang, user, setActivePage }) {
           </div>
         </div>
         {/* White stats strip */}
-        <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',background:'white'}}>
+        <div className="rg-4 stat-stripe" style={{background:'white'}}>
           {[
             {v:present,     l:{ar:'حاضر',        en:'Present'}, c:'#166534',bg:'#F0FDF4'},
             {v:absent,      l:{ar:'غائب',         en:'Absent'},  c:'#991B1B',bg:'#FEF2F2'},
@@ -220,7 +220,7 @@ export default function HeadDashboard({ lang, user, setActivePage }) {
       </div>
 
       {/* ══ 2-col ══ */}
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'16px',marginBottom:'16px'}}>
+      <div className="rg-2-stack" style={{marginBottom:'16px'}}>
 
         {/* Attendance Donut */}
         <div style={{background:'white',borderRadius:'18px',border:'1px solid #E8EDF5',padding:'20px',boxShadow:'0 2px 8px rgba(0,0,0,.04)'}}>

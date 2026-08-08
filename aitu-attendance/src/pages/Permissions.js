@@ -168,7 +168,7 @@ function Permissions({ lang, user }) {
   const pt = selectedType;
 
   return (
-    <div style={{ padding: '24px', fontFamily: 'Cairo, sans-serif', direction: dir }}>
+    <div className="page-pad" style={{ fontFamily: 'Cairo, sans-serif', direction: dir }}>
 
       {/* Toast */}
       {toast && (
@@ -199,7 +199,7 @@ function Permissions({ lang, user }) {
       </div>
 
       {/* Balance + Cards side by side */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '20px', marginBottom: '20px', alignItems: 'center' }}>
+      <div className="rg-2-stack" style={{ gap: '20px', marginBottom: '20px', alignItems: 'center' }}>
 
         {/* Balance — Circular donut */}
         <div style={{ background: 'white', borderRadius: '16px', border: '1px solid #E8EDF5', padding: '20px 24px', marginBottom: '20px', boxShadow: '0 2px 8px rgba(0,0,0,.04)' }}>

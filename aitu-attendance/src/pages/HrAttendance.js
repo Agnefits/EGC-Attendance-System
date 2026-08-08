@@ -179,7 +179,7 @@ export default function HrAttendance({ lang, readOnly = false }) {
   const currentCount = activeTab === 'att' ? filteredAtt.length : activeTab === 'perm' ? filteredPerm.length : filteredLeaves.length;
 
   return (
-    <div style={{ padding: '22px 26px', fontFamily: 'Cairo,sans-serif', direction: dir, background: '#F1F5F9', minHeight: '100%' }}>
+    <div className="page-pad" style={{ fontFamily: 'Cairo,sans-serif', direction: dir, background: '#F1F5F9', minHeight: '100%' }}>
 
       {/* ══ HERO (admin-style) ══ */}
       <div style={{ borderRadius: '16px', marginBottom: '18px', overflow: 'hidden', boxShadow: '0 4px 16px rgba(13,59,122,.15)' }}>
@@ -224,7 +224,7 @@ export default function HrAttendance({ lang, readOnly = false }) {
 
       {/* ── Stats (att only) ── */}
       {activeTab === 'att' && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '14px', marginBottom: '18px' }}>
+        <div className="rg-4" style={{ gap: '14px', marginBottom: '18px' }}>
           {[
             { l: { ar: 'الإجمالي', en: 'Total' }, v: stats.total, c: '#334155', bg: '#F1F5F9', b: '#CBD5E1' },
             { l: { ar: 'حاضر', en: 'Present' }, v: stats.present, c: '#14532D', bg: '#DCFCE7', b: '#BBF7D0' },
@@ -266,7 +266,7 @@ export default function HrAttendance({ lang, readOnly = false }) {
         </div>
 
         {/* Row 1 */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '14px', marginBottom: '14px' }}>
+        <div className="rg-3" style={{ gap: '14px', marginBottom: '14px' }}>
 
           {/* Dept */}
           <div>
@@ -359,13 +359,11 @@ export default function HrAttendance({ lang, readOnly = false }) {
           </div>
         </div>
 
-        {/* Row 2: dates + shortcuts */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: '14px', alignItems: 'end' }}>
+        {/* Row 2: Dates */}
+        <div className="rg-2" style={{ gap: '14px' }}>
           <div>
             <label style={labelS}>{lang === 'ar' ? 'من تاريخ' : 'From Date'}</label>
-            <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
-              onFocus={e => e.target.style.borderColor = '#1565C0'} onBlur={e => e.target.style.borderColor = '#E2E8F0'}
-              style={{ ...inputS, direction: 'ltr' }} />
+            <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} style={{ ...inputS, direction: 'ltr' }} />
           </div>
           <div>
             <label style={labelS}>{lang === 'ar' ? 'إلى تاريخ' : 'To Date'}</label>
@@ -375,7 +373,7 @@ export default function HrAttendance({ lang, readOnly = false }) {
           </div>
           <div>
             <label style={labelS}>{lang === 'ar' ? 'اختصارات' : 'Quick'}</label>
-            <div style={{ display: 'flex', gap: '7px' }}>
+            <div style={{ display: 'flex', gap: '7px', flexWrap: 'wrap' }}>
               {[
                 { l: { ar: 'هذا الشهر', en: 'This Month' }, fn: () => setQuickDate(0) },
                 { l: { ar: 'شهرين', en: '2 Months' }, fn: () => setQuickDate(2) },
@@ -416,7 +414,7 @@ export default function HrAttendance({ lang, readOnly = false }) {
             {currentCount} {lang === 'ar' ? 'سجل' : 'records'}
           </span>
         </div>
-        <div style={{ overflowX: 'auto', maxHeight: '480px', overflowY: 'auto' }}>
+        <div className="tbl-wrap" style={{ maxHeight: '480px', overflowY: 'auto' }}>
           {activeTab === 'att' && (
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead><tr>

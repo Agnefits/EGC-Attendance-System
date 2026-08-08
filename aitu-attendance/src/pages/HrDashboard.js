@@ -150,11 +150,11 @@ export default function HrDashboard({ lang, user, setActivePage }) {
   }
 
   return (
-    <div style={{ padding: '24px 28px', fontFamily: 'Cairo,sans-serif', direction: dir, background: '#F1F5F9', minHeight: '100%' }}>
+    <div className="page-pad" style={{ fontFamily: 'Cairo,sans-serif', direction: dir, background: '#F1F5F9', minHeight: '100%' }}>
       {/* ══ HERO ══ */}
       <div style={{ borderRadius: '16px', marginBottom: '18px', overflow: 'hidden', boxShadow: '0 4px 16px rgba(13,59,122,.15)' }}>
         <div style={{ background: 'linear-gradient(135deg,#0D3B7A 0%,#1565C0 60%,#1E88E5 100%)', padding: '20px 26px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flex: 1, minWidth: 0 }}>
             <div style={{ width: '50px', height: '50px', borderRadius: '14px', background: 'rgba(255,255,255,.15)', border: '2px solid rgba(255,255,255,.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', fontWeight: '900', color: 'white', flexShrink: 0 }}>
               {(lang === 'en' ? user?.nameEn : user?.name)?.charAt(0) || 'H'}
             </div>
@@ -166,7 +166,7 @@ export default function HrDashboard({ lang, user, setActivePage }) {
               </div>
             </div>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
             <div style={{ textAlign: 'center' }}>
               <div style={{ fontSize: '12px', color: 'rgba(255,255,255,.5)', marginBottom: '3px', letterSpacing: '.5px' }}>{lang === 'ar' ? 'الوقت' : 'TIME'}</div>
               <div style={{ fontSize: '22px', fontWeight: '800', color: 'white', direction: 'ltr', fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>{time}</div>
@@ -191,7 +191,7 @@ export default function HrDashboard({ lang, user, setActivePage }) {
                 )}
               </button>
               {showNotif && (
-                <div style={{ position: 'fixed', top: '130px', [lang === 'ar' ? 'left' : 'right']: '16px', width: '300px', background: 'white', borderRadius: '14px', border: '1px solid #E2E8F0', boxShadow: '0 12px 40px rgba(0,0,0,.15)', zIndex: 99999, overflow: 'hidden', fontFamily: 'Cairo,sans-serif', direction: dir }}>
+                <div className="notif-popup" style={{ top: '130px', [lang === 'ar' ? 'left' : 'right']: '16px', direction: dir }}>
                   <div style={{ padding: '12px 16px', borderBottom: '1px solid #F1F5F9', background: '#FAFBFC', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span style={{ fontSize: '13px', fontWeight: '800', color: '#0F172A' }}>{lang === 'ar' ? 'الإشعارات' : 'Notifications'}</span>
                     <button onClick={() => setShowNotif(false)}
@@ -235,7 +235,7 @@ export default function HrDashboard({ lang, user, setActivePage }) {
           </div>
         </div>
         {/* Stats strip */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6,1fr)', background: 'white' }}>
+        <div className="rg-6 stat-stripe" style={{ background: 'white' }}>
           {(() => {
             const hrAtt = attendance.filter(a => a.employeeId === user?.employeeId);
             const hrPres = hrAtt.filter(a => a.status === 'present' || a.status === 'left').length;
@@ -262,7 +262,7 @@ export default function HrDashboard({ lang, user, setActivePage }) {
       </div>
 
       {/* ══ QUICK ACTIONS ══ */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6,1fr)', gap: '12px', marginBottom: '18px' }}>
+      <div className="rg-3" style={{ marginBottom: '18px' }}>
         {[
           { icon: '👤', l: { ar: 'إضافة موظف', en: 'Add Employee' }, c: '#166534', bg: '#DCFCE7', bd: '#BBF7D0', page: 'addEmployee' },
           { icon: '📋', l: { ar: 'سجل الحضور', en: 'Attendance Log' }, c: '#1565C0', bg: '#DBEAFE', bd: '#BFDBFE', page: 'attendance' },
@@ -285,7 +285,7 @@ export default function HrDashboard({ lang, user, setActivePage }) {
       </div>
 
       {/* ══ MAIN GRID ══ */}
-      <div style={{ display: 'grid', gridTemplateColumns: '280px 1fr', gap: '16px', marginBottom: '18px' }}>
+      <div className="rg-aside" style={{ marginBottom: '18px' }}>
 
         {/* Attendance donut */}
         <div style={{ ...card, padding: '20px' }}>
@@ -341,7 +341,7 @@ export default function HrDashboard({ lang, user, setActivePage }) {
             <div style={{ fontSize: '14px', fontWeight: '800', color: '#0F172A', marginBottom: '14px', paddingBottom: '10px', borderBottom: '1px solid #F1F5F9' }}>
               {lang === 'ar' ? 'تركيبة الموظفين' : 'Workforce Composition'}
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '10px' }}>
+            <div className="rg-4" style={{ gap: '10px' }}>
               {[
                 { l: { ar: 'رجل', en: 'Male' }, v: maleEmps, pct: Math.round(maleEmps / totalEmps * 100), c: '#1565C0', bg: '#DBEAFE', bd: '#BFDBFE' },
                 { l: { ar: 'أنثى', en: 'Female' }, v: femaleEmps, pct: Math.round(femaleEmps / totalEmps * 100), c: '#BE185D', bg: '#FCE7F3', bd: '#FBCFE8' },
@@ -409,7 +409,7 @@ export default function HrDashboard({ lang, user, setActivePage }) {
       </div>
 
       {/* ══ ROW 3: Alerts + Leave donut ══ */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 280px', gap: '16px', marginBottom: '18px', marginTop: '18px' }}>
+      <div className="rg-2-stack" style={{ gap: '16px', marginBottom: '18px', marginTop: '18px' }}>
 
         {/* 1. Smart Alerts */}
         {(() => {
@@ -548,7 +548,7 @@ export default function HrDashboard({ lang, user, setActivePage }) {
       </div>
 
       {/* ══ ROW 4: Monthly chart + new employees + on leave today ══ */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 220px', gap: '16px', marginBottom: '18px' }}>
+      <div className="rg-3-right" style={{ gap: '16px', marginBottom: '18px' }}>
 
         {/* 4. Monthly attendance chart */}
         {(() => {
@@ -692,7 +692,7 @@ export default function HrDashboard({ lang, user, setActivePage }) {
       </div>
 
       {/* ══ BOTTOM GRID ══ */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+      <div className="rg-2-stack" style={{ gap: '16px' }}>
 
         {/* Pending leaves */}
         <div style={{ ...card, overflow: 'hidden' }}>

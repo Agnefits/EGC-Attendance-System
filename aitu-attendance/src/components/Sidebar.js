@@ -41,17 +41,10 @@ function Sidebar({ activePage, setActivePage, t, role, lang }) {
   };
 
   return (
-    <aside style={{
-      width:'230px', minWidth:'230px',
-      background:'white',
-      borderInlineEnd:'1px solid #E2E8F0',
+    <aside className="sidebar" style={{
       display:'flex', flexDirection:'column',
       fontFamily:'Cairo, sans-serif',
       direction:dir,
-      height:'100vh',
-      position:'sticky',
-      top:0,
-      overflow:'hidden',
     }}>
 
       {/* ── Header ── */}

@@ -212,7 +212,7 @@ function Dashboard({ t, lang, user, setActivePage }) {
   };
 
   return (
-    <div style={{padding:'24px 28px',fontFamily:'Cairo,sans-serif',direction:dir,background:'#F1F5F9',minHeight:'100%'}}>
+    <div className="page-pad" style={{fontFamily:'Cairo,sans-serif',direction:dir,background:'#F1F5F9',minHeight:'100%'}}>
 
       {/* ══ HERO ══ */}
       <div style={{borderRadius:'16px',marginBottom:'18px',overflow:'hidden',boxShadow:'0 4px 16px rgba(13,59,122,.15)'}}>
@@ -254,7 +254,7 @@ function Dashboard({ t, lang, user, setActivePage }) {
                 )}
               </button>
               {notifOpen&&(
-                <div style={{position:'fixed',top:'130px',[lang==='ar'?'left':'right']:'16px',width:'300px',background:'white',borderRadius:'14px',border:'1px solid #E2E8F0',boxShadow:'0 12px 40px rgba(0,0,0,.15)',zIndex:99999,overflow:'hidden',fontFamily:'Cairo,sans-serif',direction:dir}}>
+                <div className="notif-popup" style={{top:'130px',[lang==='ar'?'left':'right']:'16px',direction:dir}}>
                   <div style={{padding:'12px 16px',borderBottom:'1px solid #F1F5F9',background:'#FAFBFC',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
                     <span style={{fontSize:'13px',fontWeight:'800',color:'#0F172A'}}>{lang==='ar'?'الإشعارات':'Notifications'}</span>
                     <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
@@ -275,7 +275,7 @@ function Dashboard({ t, lang, user, setActivePage }) {
         </div>
 
         {/* Stats strip */}
-        <div style={{display:'grid',gridTemplateColumns:'repeat(6,1fr)',background:'white'}}>
+        <div className="rg-6 stat-stripe" style={{background:'white'}}>
           {[
             {v:totalEmps,   l:{ar:'إجمالي الموظفين',en:'Total Emps'}, c:'#1565C0',bg:'#EFF6FF',fn:()=>setShowEmp(true)},
             {v:todayPres,   l:{ar:'حاضر اليوم',     en:'Present'},    c:'#166534',bg:'#F0FDF4',fn:()=>setShowAtt(true)},
@@ -294,7 +294,7 @@ function Dashboard({ t, lang, user, setActivePage }) {
       </div>
 
       {/* ══ QUICK ACTIONS ══ */}
-      <div style={{display:'grid',gridTemplateColumns:'repeat(6,1fr)',gap:'12px',marginBottom:'18px'}}>
+      <div className="rg-6" style={{marginBottom:'18px'}}>
         {[
           {icon:'👤',l:{ar:'إضافة موظف',    en:'Add Employee'},   c:'#166534',bg:'#DCFCE7',bd:'#BBF7D0',page:'addEmployee'},
           {icon:'📋',l:{ar:'سجل الحضور',    en:'Attendance'},     c:'#1565C0',bg:'#DBEAFE',bd:'#BFDBFE',page:'attendance'},
@@ -412,7 +412,7 @@ function Dashboard({ t, lang, user, setActivePage }) {
         <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}`}</style>
       </div>
 
-      <div style={{display:'grid',gridTemplateColumns:'260px 1fr',gap:'16px',marginBottom:'16px'}}>
+      <div className="rg-aside" style={{marginBottom:'16px'}}>
 
         {/* Attendance donut */}
         <div style={{...card,padding:'20px'}}>
@@ -460,7 +460,7 @@ function Dashboard({ t, lang, user, setActivePage }) {
             <div style={{fontSize:'14px',fontWeight:'800',color:'#0F172A',marginBottom:'14px',paddingBottom:'10px',borderBottom:'1px solid #F1F5F9'}}>
               {lang==='ar'?'تركيبة الموظفين':'Workforce'}
             </div>
-            <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'10px'}}>
+            <div className="rg-4">
               {[
                 {l:{ar:'رجل',    en:'Male'},   v:maleEmps,    pct:Math.round(maleEmps/totalEmps*100),    c:'#1565C0',bg:'#DBEAFE',bd:'#BFDBFE'},
                 {l:{ar:'أنثى',   en:'Female'}, v:femaleEmps,  pct:Math.round(femaleEmps/totalEmps*100),  c:'#BE185D',bg:'#FCE7F3',bd:'#FBCFE8'},
@@ -522,7 +522,7 @@ function Dashboard({ t, lang, user, setActivePage }) {
       </div>
 
       {/* ══ ROW 2: Monthly chart + Alerts + On leave ══ */}
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 220px',gap:'16px',marginBottom:'16px'}}>
+      <div className="rg-3-right" style={{marginBottom:'16px'}}>
 
         {/* Monthly chart */}
         <div style={{...card,padding:'18px 20px'}}>
@@ -634,7 +634,7 @@ function Dashboard({ t, lang, user, setActivePage }) {
       </div>
 
       {/* ══ ROW 3: Pending leaves + Pending perms ══ */}
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'16px'}}>
+      <div className="rg-2-stack" style={{marginBottom:'16px'}}>
 
         {/* Pending leaves */}
         <div style={{...card,overflow:'hidden'}}>
@@ -690,7 +690,7 @@ function Dashboard({ t, lang, user, setActivePage }) {
       </div>
 
       {/* ══ ROW 4: Latest activity + Leave type stats ══ */}
-      <div style={{display:'grid',gridTemplateColumns:'1fr 280px',gap:'16px',marginBottom:'16px'}}>
+      <div className="rg-2-stack" style={{marginBottom:'16px'}}>
 
         {/* Latest activity */}
         <div style={{...card,overflow:'hidden'}}>
@@ -711,7 +711,7 @@ function Dashboard({ t, lang, user, setActivePage }) {
                 <div key={l.id} style={{padding:'10px 18px',borderBottom:'1px solid #F8FAFC',display:'flex',alignItems:'center',gap:'12px',transition:'background .15s'}}
                   onMouseEnter={e=>e.currentTarget.style.background='#F8FAFC'}
                   onMouseLeave={e=>e.currentTarget.style.background='white'}>
-                  <div style={{width:'34px',height:'34px',borderRadius:'9px',background:'linear-gradient(135deg,#1565C0,#1E88E5)',display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontWeight:'800',fontSize:'13px',flexShrink:0}}>
+                  <div style={{width:'34px',height:'34px',borderRadius:'99px',background:'linear-gradient(135deg,#1565C0,#1E88E5)',display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontWeight:'800',fontSize:'13px',flexShrink:0}}>
                     {(lang==='en'?emp?.nameEn:emp?.name)?.charAt(0)||'?'}
                   </div>
                   <div style={{flex:1,minWidth:0}}>
@@ -763,7 +763,8 @@ function Dashboard({ t, lang, user, setActivePage }) {
 
       {/* ══ MODALS ══ */}
       <Modal open={showAtt} onClose={()=>setShowAtt(false)} lang={lang} title={lang==='ar'?'تفاصيل الحضور':'Attendance Details'}>
-        <table style={{width:'100%',borderCollapse:'collapse'}}>
+        <div className="tbl-wrap">
+          <table style={{width:'100%',borderCollapse:'collapse'}}>
           <thead><tr>{[lang==='ar'?'الموظف':'Employee',lang==='ar'?'القسم':'Dept',lang==='ar'?'حضور':'In',lang==='ar'?'انصراف':'Out',lang==='ar'?'الحالة':'Status'].map(h=><th key={h} style={thS}>{h}</th>)}</tr></thead>
           <tbody>
             {ATTENDANCE.map((a,idx)=>{
@@ -788,51 +789,56 @@ function Dashboard({ t, lang, user, setActivePage }) {
             })}
           </tbody>
         </table>
+        </div>
       </Modal>
 
       <Modal open={showEmp} onClose={()=>setShowEmp(false)} lang={lang} title={lang==='ar'?'قائمة الموظفين':'Employees'}>
-        <table style={{width:'100%',borderCollapse:'collapse'}}>
-          <thead><tr>{[lang==='ar'?'الاسم':'Name',lang==='ar'?'القسم':'Dept',lang==='ar'?'النوع':'Type',lang==='ar'?'الجنس':'Gender'].map(h=><th key={h} style={thS}>{h}</th>)}</tr></thead>
-          <tbody>
-            {EMPLOYEES.map((e,idx)=>{
-              const dept = DEPARTMENTS.find(d=>d.id===e.departmentId);
-              const typeBg = e.type==='academic'?'#EDE9FE':'#FEF3C7';
-              const typeC  = e.type==='academic'?'#6B21A8':'#B45309';
-              const typeLbl= lang==='ar'?(e.type==='academic'?'أكاديمي':'إداري'):(e.type==='academic'?'Academic':'Admin');
-              const genderLbl= lang==='ar'?(e.gender==='male'?'رجل':'أنثى'):(e.gender==='male'?'Male':'Female');
-              return(
-                <tr key={e.id} style={{background:idx%2===0?'white':'#FAFBFC'}}>
-                  <td style={tdS({textAlign:lang==='ar'?'right':'left',fontWeight:'700',color:'#0F172A'})}>{lang==='en'?e.nameEn:e.name}</td>
-                  <td style={tdS({fontSize:'12px',color:'#64748B'})}>{lang==='en'?dept?.nameEn:dept?.name}</td>
-                  <td style={tdS()}>
-                    <span style={{background:typeBg,color:typeC,padding:'2px 9px',borderRadius:'999px',fontSize:'11px',fontWeight:'700'}}>{typeLbl}</span>
-                  </td>
-                  <td style={tdS()}>{genderLbl}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+        <div className="tbl-wrap">
+          <table style={{width:'100%',borderCollapse:'collapse'}}>
+            <thead><tr>{[lang==='ar'?'الاسم':'Name',lang==='ar'?'القسم':'Dept',lang==='ar'?'النوع':'Type',lang==='ar'?'الجنس':'Gender'].map(h=><th key={h} style={thS}>{h}</th>)}</tr></thead>
+            <tbody>
+              {EMPLOYEES.map((e,idx)=>{
+                const dept = DEPARTMENTS.find(d=>d.id===e.departmentId);
+                const typeBg = e.type==='academic'?'#EDE9FE':'#FEF3C7';
+                const typeC  = e.type==='academic'?'#6B21A8':'#B45309';
+                const typeLbl= lang==='ar'?(e.type==='academic'?'أكاديمي':'إداري'):(e.type==='academic'?'Academic':'Admin');
+                const genderLbl= lang==='ar'?(e.gender==='male'?'رجل':'أنثى'):(e.gender==='male'?'Male':'Female');
+                return(
+                  <tr key={e.id} style={{background:idx%2===0?'white':'#FAFBFC'}}>
+                    <td style={tdS({textAlign:lang==='ar'?'right':'left',fontWeight:'700',color:'#0F172A'})}>{lang==='en'?e.nameEn:e.name}</td>
+                    <td style={tdS({fontSize:'12px',color:'#64748B'})}>{lang==='en'?dept?.nameEn:dept?.name}</td>
+                    <td style={tdS()}>
+                      <span style={{background:typeBg,color:typeC,padding:'2px 9px',borderRadius:'999px',fontSize:'11px',fontWeight:'700'}}>{typeLbl}</span>
+                    </td>
+                    <td style={tdS()}>{genderLbl}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </Modal>
 
       <Modal open={showLeave} onClose={()=>setShowLeave(false)} lang={lang} title={lang==='ar'?'الإجازات المعلقة':'Pending Leaves'}>
-        <table style={{width:'100%',borderCollapse:'collapse'}}>
-          <thead><tr>{[lang==='ar'?'الموظف':'Employee',lang==='ar'?'النوع':'Type',lang==='ar'?'من':'From',lang==='ar'?'إلى':'To',lang==='ar'?'أيام':'Days'].map(h=><th key={h} style={thS}>{h}</th>)}</tr></thead>
-          <tbody>
-            {pendingLeaves.map((l,idx)=>{
-              const emp=EMPLOYEES.find(e=>e.id===l.employeeId);
-              return(
-                <tr key={l.id} style={{background:idx%2===0?'white':'#FAFBFC'}}>
-                  <td style={tdS({textAlign:lang==='ar'?'right':'left',fontWeight:'700',color:'#0F172A'})}>{lang==='en'?emp?.nameEn:emp?.name}</td>
-                  <td style={tdS()}>{l.type}</td>
-                  <td style={tdS({direction:'ltr'})}>{l.from}</td>
-                  <td style={tdS({direction:'ltr'})}>{l.to}</td>
-                  <td style={tdS({fontWeight:'800',color:'#1565C0'})}>{l.days}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+        <div className="tbl-wrap">
+          <table style={{width:'100%',borderCollapse:'collapse'}}>
+            <thead><tr>{[lang==='ar'?'الموظف':'Employee',lang==='ar'?'النوع':'Type',lang==='ar'?'من':'From',lang==='ar'?'إلى':'To',lang==='ar'?'أيام':'Days'].map(h=><th key={h} style={thS}>{h}</th>)}</tr></thead>
+            <tbody>
+              {pendingLeaves.map((l,idx)=>{
+                const emp=EMPLOYEES.find(e=>e.id===l.employeeId);
+                return(
+                  <tr key={l.id} style={{background:idx%2===0?'white':'#FAFBFC'}}>
+                    <td style={tdS({textAlign:lang==='ar'?'right':'left',fontWeight:'700',color:'#0F172A'})}>{lang==='en'?emp?.nameEn:emp?.name}</td>
+                    <td style={tdS()}>{l.type}</td>
+                    <td style={tdS({direction:'ltr'})}>{l.from}</td>
+                    <td style={tdS({direction:'ltr'})}>{l.to}</td>
+                    <td style={tdS({fontWeight:'800',color:'#1565C0'})}>{l.days}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </Modal>
 
       {/* ══ DEPT MODAL ══ */}

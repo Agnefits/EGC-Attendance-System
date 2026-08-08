@@ -70,7 +70,7 @@ function FormBody({ form, setForm, errors, setErrors, iStyle, lang, COLLEGES=[],
     return { ...iStyle, ...extra, border:`1.5px solid ${errors[field]?'#FCA5A5':'#E2E8F0'}`, background:errors[field]?'#FFF5F5':'white' };
   }
   return (
-    <div style={{ padding:'24px', display:'grid', gridTemplateColumns:'1fr 1fr', gap:'14px' }}>
+    <div className="form-grid-2" style={{ padding:'24px', gap:'14px' }}>
 
       <Field label={`${lang==='ar'?'الاسم بالعربي':'Arabic Name'} *`} error={errors.name}>
         <input placeholder={lang==='ar'?'مثال: أحمد محمد':'e.g. أحمد محمد'} value={form.name}
@@ -746,14 +746,14 @@ function Employees({ lang, user, showFormDefault }) {
   ];
 
   return (
-    <div style={{padding:'24px 28px',fontFamily:'Cairo, sans-serif',direction:dir,background:'#F1F5F9',minHeight:'100%'}}>
+    <div className="page-pad" style={{fontFamily:'Cairo, sans-serif',direction:dir,background:'#F1F5F9',minHeight:'100%'}}>
       <style>{`@keyframes cardPop{0%{transform:scale(.92);opacity:0}60%{transform:scale(1.04)}100%{transform:scale(1);opacity:1}}`}</style>
 
       {/* ── Hero header ── */}
       <div style={{
         background:'linear-gradient(135deg, #0D3B7A, #1565C0, #1E88E5)',
         borderRadius:'18px', padding:'22px 26px',
-        display:'flex', justifyContent:'space-between', alignItems:'center',
+        display:'flex', justifyContent:'space-between', alignItems:'flex-start',
         marginBottom:'20px', flexWrap:'wrap', gap:'16px',
         position:'relative', overflow:'hidden',
         boxShadow:'0 4px 20px rgba(13,59,122,.15)',
@@ -774,7 +774,7 @@ function Employees({ lang, user, showFormDefault }) {
         </div>
 
         {/* Actions — search + button on the end side */}
-        <div style={{display:'flex', alignItems:'center', gap:'10px', position:'relative'}}>
+        <div style={{display:'flex', alignItems:'center', gap:'10px', position:'relative', flexWrap:'wrap', minWidth:0}}>
           {/* Dept dropdown — admin only */}
           {(user?.role==='admin'||user?.role==='hr')&&<div ref={deptRef} style={{position:'relative'}}>
             <button onClick={openDeptMenu} style={{
@@ -901,7 +901,7 @@ function Employees({ lang, user, showFormDefault }) {
               placeholder={lang==='ar'?'بحث...':'Search...'}
               value={search} onChange={e=>setSearch(e.target.value)}
               style={{
-                ...iStyle, width:'200px',
+                ...iStyle, width:'min(200px, 100%)',
                 padding: lang==='ar'?'9px 36px 9px 12px':'9px 12px 9px 36px',
                 fontSize:'13px', borderRadius:'10px',
                 border:'1.5px solid #E2E8F0',

@@ -161,7 +161,7 @@ function AttendanceAdmin({ lang, readOnly=false }) {
   const iStyle={padding:'9px 13px',border:'1.5px solid #E2E8F0',borderRadius:'10px',fontSize:'13px',fontFamily:'Cairo',outline:'none',background:'white',color:'#0F172A'};
 
   return (
-    <div style={{padding:'24px',fontFamily:'Cairo, sans-serif',direction:dir}}>
+    <div className="page-pad" style={{fontFamily:'Cairo, sans-serif',direction:dir}}>
 
       {/* ══ HERO ══ */}
       <div style={{borderRadius:'16px',marginBottom:'18px',overflow:'hidden',boxShadow:'0 4px 16px rgba(13,59,122,.15)'}}>
@@ -191,7 +191,7 @@ function AttendanceAdmin({ lang, readOnly=false }) {
           </div>
         </div>
         {/* Stats strip */}
-        <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',background:'white'}}>
+        <div className="rg-5 stat-stripe" style={{background:'white'}}>
           {[
             {v:total,     l:{ar:'إجمالي السجلات',en:'Total'},   c:'#1565C0',bg:'#EFF6FF', filter:'all'},
             {v:present,   l:{ar:'حاضر',          en:'Present'}, c:'#166534',bg:'#F0FDF4', filter:'present'},
@@ -419,7 +419,7 @@ function AttendanceAdmin({ lang, readOnly=false }) {
       {/* ── Table view ── */}
       {viewMode==='table'&&(
       <div style={{background:'white',borderRadius:'14px',border:'1px solid #E8EDF5',overflow:'hidden',boxShadow:'0 2px 8px rgba(0,0,0,.04)'}}>
-        <div style={{overflowX:'auto'}}>
+        <div className="tbl-wrap">
           <table style={{width:'100%',borderCollapse:'collapse',fontSize:'13px'}}>
             <thead><tr>
               <th style={thS}>#</th>
